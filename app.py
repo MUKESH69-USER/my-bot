@@ -3610,8 +3610,7 @@ print(f"✅ Loaded {len(users_data)} allowed users.")
 if __name__ == "__main__":
     import time
     
-    # 1. Start the Flask Keep-Alive server first
-    keep_alive()  
+  
     
     print("🚀 Bot started...")
     
