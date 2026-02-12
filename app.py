@@ -28,7 +28,7 @@ from complete_handler import setup_complete_handler, get_bin_info
 from shopify_checker import check_site_shopify_direct, process_response_shopify
 
     
-BOT_TOKEN = "7060605683:AAFvRkZp9_yQzMi_9nAu-D2Y0v51OahuCyw"
+BOT_TOKEN = "8395369201:AAFct3GpvlNKdK4VZEcJnSK01CeJs-R5aGs"
 
 OWNER_ID = [5963548505, 1614278744]
 DARKS_ID = 5963548505
