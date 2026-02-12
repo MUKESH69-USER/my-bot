@@ -3563,7 +3563,7 @@ setup_complete_handler(
     process_response_shopify,
     update_stats,           # ← FIXED stats
     save_json,
-    is_user_allowed
+    is_user_allowed,
     load_bin_database()
 )
 
