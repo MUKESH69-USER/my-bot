@@ -415,40 +415,27 @@ def is_valid_response(response):
 # 🔐 USER AUTHORIZATION
 # ============================================================================
 
-def is_user_allowed(user_id):
-    """
-    Robust Security Check for Owners and Premium Users
-    """
+def is_user_allowed(userid):
+    """Complete handler auth - owners + approved users"""
+    # 1. Check Owner
+    if userid in OWNER_ID:
+        return True
+    
+    # 2. Check Database
     try:
-        # 1. Convert to integer for Owner Check (OWNER_ID list usually contains ints)
-        user_id_int = int(user_id)
-        if user_id_int in OWNER_ID:
-            return True
-        
-        # 2. Convert to String for Database Check (JSON keys are always strings)
-        user_id_str = str(user_id)
-        
-        # 3. Check if user exists in users_data
-        user_data = users_data.get(user_id_str)
-        if not user_data:
+        userdata = users_data.get(str(userid))
+        if not userdata:
             return False
             
-        # 4. Check Expiry
-        # Supports both 'expiry' (from /pro command) and 'expiry_date' keys
-        expiry_str = user_data.get('expiry') or user_data.get('expiry_date')
+        # FIX: Check both 'expiry' (from /pro) and 'expiry_date' (legacy)
+        expiry_date_str = userdata.get('expiry') or userdata.get('expiry_date')
         
-        if not expiry_str:
-            return False # User exists but has no expiry date set
+        if not expiry_date_str:
+            return False
             
-        expiry_date = datetime.fromisoformat(expiry_str)
-        
-        if datetime.now() > expiry_date:
-            return False # Expired
-            
-        return True # Approved and Active
-
-    except Exception as e:
-        print(f"⚠️ Auth Error for {user_id}: {e}")
+        expiry_date = datetime.fromisoformat(expiry_date_str)
+        return datetime.now() <= expiry_date
+    except:
         return False
 # ============================================================================
 # 1. READ FILE DIRECTLY FROM TELEGRAM (NO DOWNLOAD)
