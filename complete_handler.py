@@ -200,10 +200,11 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
                           is_user_allowed_func):
     
     # 1. FILE UPLOAD LISTENER
+    # 1. FILE UPLOAD LISTENER
     @bot.message_handler(content_types=['document'])
     def handle_file_upload_event(message):
         if not is_user_allowed_func(message.from_user.id): 
-            bot.reply_to(message, "🚫 <b>Access Denied:</b> Contact Admin.", parse_mode='HTML')
+            bot.reply_to(message, "🚫 <b>Access Denied</b>", parse_mode='HTML')
             return
 
         try:
@@ -225,20 +226,15 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
                 user_id = message.from_user.id
                 if user_id not in user_sessions: user_sessions[user_id] = {}
                 user_sessions[user_id]['ccs'] = ccs
-                # Don't overwrite proxies if they exist, unless explicitly uploading proxies
-                if 'proxies' not in user_sessions[user_id]:
-                    user_sessions[user_id]['proxies'] = []
                 
-                # === GATE MENU ===
+                # RESTORED ALL BUTTONS HERE
                 markup = types.InlineKeyboardMarkup(row_width=1)
-                markup.add(
-                    types.InlineKeyboardButton("🛍️ Shopify Mass (Multi-Site)", callback_data="run_mass_shopify"),
-                    types.InlineKeyboardButton("🅿️ PayPal (Science) - $1", callback_data="run_mass_paypal_sci"),
-                    types.InlineKeyboardButton("🅿️ PayPal (SFTS) - $1", callback_data="run_mass_paypal_sfts"),
-                    types.InlineKeyboardButton("💳 Stripe Auth (Assoc)", callback_data="run_mass_stripe_assoc"),
-                    types.InlineKeyboardButton("🌩️ HostArmada (Stripe)", callback_data="run_mass_hostarmada"),
-                    types.InlineKeyboardButton("❌ Cancel", callback_data="action_cancel")
-                )
+                markup.add(types.InlineKeyboardButton("🛍️ Shopify Mass (Multi-Site)", callback_data="run_mass_shopify"))
+                markup.add(types.InlineKeyboardButton("🅿️ PayPal (Science) - $1", callback_data="run_mass_paypal_sci"))
+                markup.add(types.InlineKeyboardButton("🅿️ PayPal (SFTS) - $1", callback_data="run_mass_paypal_sfts"))
+                markup.add(types.InlineKeyboardButton("💳 Stripe Auth (Assoc)", callback_data="run_mass_stripe_assoc"))
+                markup.add(types.InlineKeyboardButton("🌩️ HostArmada (Stripe)", callback_data="run_mass_hostarmada"))
+                markup.add(types.InlineKeyboardButton("❌ Cancel", callback_data="action_cancel"))
                 
                 bot.edit_message_text(
                     f"📂 <b>File:</b> <code>{file_name}</code>\n"
@@ -246,33 +242,30 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
                     f"<b>⚡ Select Checking Gate:</b>",
                     message.chat.id, msg_loading.message_id, reply_markup=markup, parse_mode='HTML'
                 )
+            
             else:
-                # 2. If no CCs, assume it is a PROXY file
+                # 2. PROXY FILE HANDLING (With Strict Validation)
                 raw_proxies = [line.strip() for line in file_content.split('\n') if ':' in line]
                 
                 if raw_proxies:
-                    bot.edit_message_text(f"⚡ <b>Checking {len(raw_proxies)} Proxies...</b>\n<i>Filtering dead ones...</i>", message.chat.id, msg_loading.message_id, parse_mode='HTML')
+                    bot.edit_message_text(f"⏳ <b>Validating {len(raw_proxies)} Proxies...</b>\n<i>Filtering dead ones...</i>", message.chat.id, msg_loading.message_id, parse_mode='HTML')
                     
                     live_proxies = []
-                    
-                    # Check proxies concurrently
+                    # Check concurrently to be fast but strict
                     with ThreadPoolExecutor(max_workers=50) as executor:
                         futures = {executor.submit(check_proxy_live, p): p for p in raw_proxies}
                         
-                        checked = 0
-                        for future in as_completed(futures):
-                            result = future.result()
-                            if result:
-                                live_proxies.append(result)
-                            checked += 1
+                        for i, future in enumerate(as_completed(futures)):
+                            res = future.result()
+                            if res:
+                                live_proxies.append(res)
                             
-                            # Optional: Update UI every 50 checks (can remove to make it faster)
-                            if checked % 50 == 0:
+                            # Show progress every 25 checks
+                            if i % 25 == 0:
                                 try:
                                     bot.edit_message_text(
-                                        f"⚡ <b>Checking Proxies...</b>\n"
-                                        f"Total: {len(raw_proxies)}\n"
-                                        f"Checked: {checked}\n"
+                                        f"⚡ <b>Filtering Proxies...</b>\n"
+                                        f"Checked: {i}/{len(raw_proxies)}\n"
                                         f"✅ Live: {len(live_proxies)}", 
                                         message.chat.id, msg_loading.message_id, parse_mode='HTML'
                                     )
@@ -296,7 +289,7 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
 
         except Exception as e:
             bot.reply_to(message, f"❌ Error: {e}")
-
+            
     # 2. MASS CHECK COMMAND
     @bot.message_handler(commands=['msh', 'hardcook'])
     def handle_mass_check_command(message):
@@ -706,3 +699,4 @@ def send_final(bot, chat_id, mid, total, results, duration):
     try: bot.edit_message_text(msg, chat_id, mid, parse_mode='HTML')
 
     except: bot.send_message(chat_id, msg, parse_mode='HTML')
+
