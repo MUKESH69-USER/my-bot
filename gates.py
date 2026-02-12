@@ -523,16 +523,21 @@ def check_stripe_associations(cc, proxy=None):
         if 'security code' in text: return "CCN Live (Security Code)", "APPROVED"
         
         # Parse Decline Reason
-        try:
-            reason = re.search(r'message\":\"(.*?)\"', r_ajax)
-            reason_txt = reason.group(1) if reason else 'Rejected'
-            return f"Declined ({reason_txt})", "DECLINED"
-        except:
-            return "Declined", "DECLINED"
-
+        reason = re.search(r'message\\":\\"(.*?)\\"', r_ajax)
+        reason_txt = reason.group(1) if reason else 'Rejected'
+        return f"❌ Declined ({reason_txt})", "DECLINED"
+        
+    except requests.exceptions.Timeout:
+        return "⏱️ Timeout (proxy/site slow)", "ERROR"
+    except requests.exceptions.ProxyError:
+        return "🔌 Proxy Dead", "ERROR"
+    except AttributeError as e:
+        return f"🚫 Site Changed (check cookies) - {str(e)[:50]}", "ERROR"
     except Exception as e:
-        return f"Error: {str(e)}", "ERROR"
-
+        # Catch-all for ANY crash
+        error_trace = traceback.format_exc()
+        print(f"❌ CRITICAL ERROR [{cc}]:\n{error_trace}")
+        return f"💥 System Error: {str(e)[:80]}", "ERROR"
 
 # ============================================================================
 # 🚪 GATE 4: HostArmada (Stripe)
