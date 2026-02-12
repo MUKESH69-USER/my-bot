@@ -24,22 +24,9 @@ socket.setdefaulttimeout(30)
 from collections import Counter
 import logging
 logger = logging.getLogger(__name__)
-from flask import Flask
 from complete_handler import setup_complete_handler
 from shopify_checker import check_site_shopify_direct, process_response_shopify
-app = Flask(__name__)
 
-@app.route('/')
-def home():
-    return "I am alive"
-
-def run_web_server():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
-
-def keep_alive():
-    t = threading.Thread(target=run_web_server)
-    t.start()
     
 BOT_TOKEN = "7060605683:AAFvRkZp9_yQzMi_9nAu-D2Y0v51OahuCyw"
 
@@ -3623,9 +3610,7 @@ print(f"✅ Loaded {len(users_data)} allowed users.")
 
 if __name__ == "__main__":
     import time
-    
-    # 1. Start the Flask Keep-Alive server first
-    keep_alive()  
+      
     
     print("🚀 Bot started...")
     
