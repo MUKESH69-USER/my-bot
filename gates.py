@@ -347,7 +347,7 @@ def check_paypal_sfts(cc, proxy=None):
         elif 'ACCOUNT_CLOSED' in text: return "Account closed", "DECLINED"
         elif 'PAYER_ACCOUNT_LOCKED_OR_CLOSED' in text: return "Account closed", "DECLINED"
         elif 'LOST_OR_STOLEN' in text: return "LOST OR STOLEN", "DECLINED"
-        elif 'CVV2_FAILURE' in text: return "Card Issuer Declined CVV", "APPROVED"
+        elif 'CVV2_FAILURE' in text: return "Card Issuer Declined CVV", "DECLINED"
         elif 'SUSPECTED_FRAUD' in text: return "SUSPECTED FRAUD", "DECLINED"
         elif 'INVALID_ACCOUNT' in text: return 'INVALID_ACCOUNT', "DECLINED"
         elif 'REATTEMPT_NOT_PERMITTED' in text: return "REATTEMPT NOT PERMITTED", "DECLINED"
