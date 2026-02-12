@@ -654,21 +654,33 @@ def process_mass_gate_check(bot, message, ccs, gate_func, gate_name, proxies):
 def send_hit(bot, chat_id, res, title):
     try:
         bin_info = get_bin_info(res['cc'])
-        site_name = res['site_url'].replace('https://', '').split('/')[0]
+        # Clean site URL for display
+        site_name = res['site_url'].replace('https://', '').replace('http://', '').split('/')[0]
+        
+        # Determine formatting based on result type
+        if "COOKED" in title:
+            header_emoji = "🔥" 
+        else:
+            header_emoji = "✅"
+
         msg = f"""
 ┏━━━━━━━⍟
-┃ <b>{title} HIT!</b>
+┃ <b>{title} HIT!</b> {header_emoji}
 ┗━━━━━━━━━━━⊛
-💳 <b>Card:</b> <code>{res['cc']}</code>
-💰 <b>Resp:</b> {res['response']}
-💲 <b>Amt:</b> ${res['price']}
-🌐 <b>Site:</b> {site_name}
-🔌 <b>Gate:</b> {res['gateway']}
-🏳️ <b>Info:</b> {bin_info.get('country_flag','')} {bin_info.get('bank','')}
+[⌬] 𝐂𝐚𝐫𝐝↣ <code>{res['cc']}</code>
+[⌬] 𝐑𝐞𝐬𝐩𝐨𝐧𝐬𝐞↣ {res['response']}
+[⌬] 𝐆𝐚𝐭𝐞𝐰𝐚𝐲↣ {res['gateway']}
+[⌬] 𝐔𝐑𝐋↣ {site_name}
 ━━━━━━━━━━━━━━━━━━━━
+[⌬] 𝐁𝐫𝐚𝐧𝐝↣ {bin_info.get('brand', 'UNKNOWN').upper()} {bin_info.get('type', 'UNKNOWN').upper()}
+[⌬] 𝐁𝐚𝐧𝐤↣ {bin_info.get('bank', 'UNKNOWN').upper()}
+[⌬] 𝐂𝐨𝐮𝐧𝐭𝐫𝐲↣ {bin_info.get('country_name', 'UNKNOWN').upper()} {bin_info.get('country_flag', '🏳️')}
+━━━━━━━━━━━━━━━━━━━━
+Owner :- @Unknown_bolte
 """
         bot.send_message(chat_id, msg, parse_mode='HTML')
-    except: pass
+    except Exception as e:
+        print(f"Error sending hit: {e}")
 
 def update_ui(bot, chat_id, mid, processed, total, results):
     try:
@@ -699,4 +711,5 @@ def send_final(bot, chat_id, mid, total, results, duration):
     try: bot.edit_message_text(msg, chat_id, mid, parse_mode='HTML')
 
     except: bot.send_message(chat_id, msg, parse_mode='HTML')
+
 
