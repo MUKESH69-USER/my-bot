@@ -377,24 +377,6 @@ def extract_multiple_ccs(text):
     
     return ccs
 
-# Get bin info
-def get_bin_info(card_number):
-    # Clean the card number (remove any non-digit characters)
-    card_number = re.sub(r'\D', '', card_number)
-    
-    # Get the first 6 digits for BIN
-    if len(card_number) < 6:
-        return None
-        
-    bin_code = card_number[:6]
-    try:
-        response = requests.get(f"https://bins.antipublic.cc/bins/{bin_code}", timeout=20)
-        if response.status_code == 200:
-            return response.json()
-    except:
-        pass
-    return None
-
 def create_session_with_retries():
     """Create a requests session with retry strategy and longer timeouts"""
     session = requests.Session()
