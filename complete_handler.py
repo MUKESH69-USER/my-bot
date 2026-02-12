@@ -484,7 +484,7 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
 # 🧠 MASS CHECK ENGINE
 # ============================================================================
 
-def processmassgate_check(bot, message, ccs, gate_func, gate_name, proxies):
+def process_mass_gate_check(bot, message, ccs, gate_func, gate_name, proxies):
     """
     Generic mass check for API gates (PayPal, Stripe, etc.)
     FIXED: Now properly shows errors in bot instead of silent crashes
@@ -672,6 +672,7 @@ def send_final(bot, chat_id, mid, total, results, duration):
     try: bot.edit_message_text(msg, chat_id, mid, parse_mode='HTML')
 
     except: bot.send_message(chat_id, msg, parse_mode='HTML')
+
 
 
 
