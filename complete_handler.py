@@ -16,6 +16,26 @@ from shopify_checker import check_site_shopify_direct, process_response_shopify
 
 OWNER_ID = [5963548505, 1614278744]
 
+def check_proxy_live(proxy):
+    """Simple check to see if proxy is alive"""
+    try:
+        parts = proxy.strip().split(':')
+        formatted = ""
+        if len(parts) == 2:
+            formatted = f"http://{parts[0]}:{parts[1]}"
+        elif len(parts) == 4:
+            formatted = f"http://{parts[2]}:{parts[3]}@{parts[0]}:{parts[1]}"
+        else:
+            return None
+            
+        proxies_dict = {'http': formatted, 'https': formatted}
+        # 5 second timeout, verify=False to accept all SSL
+        r = requests.get("http://httpbin.org/ip", proxies=proxies_dict, timeout=5, verify=False)
+        if r.status_code == 200:
+            return proxy
+    except:
+        pass
+    return None
 USER_PROXIES_FILE = "user_proxies.json"
 
 def load_user_proxies():
@@ -182,7 +202,6 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
     # 1. FILE UPLOAD LISTENER
     @bot.message_handler(content_types=['document'])
     def handle_file_upload_event(message):
-        # FIX 1: Use correct function name 'is_user_allowed_func'
         if not is_user_allowed_func(message.from_user.id): 
             bot.reply_to(message, "🚫 <b>Access Denied:</b> Contact Admin.", parse_mode='HTML')
             return
@@ -198,26 +217,28 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
             file_info = bot.get_file(message.document.file_id)
             file_content = bot.download_file(file_info.file_path).decode('utf-8', errors='ignore')
             
-            # FIX 2: Use correct function name 'extract_cards_from_text'
+            # 1. Try to extract CCs first
             ccs = extract_cards_from_text(file_content)
             
             if ccs:
-                # Store in session
+                # Store CCs in session
                 user_id = message.from_user.id
                 if user_id not in user_sessions: user_sessions[user_id] = {}
                 user_sessions[user_id]['ccs'] = ccs
-                user_sessions[user_id]['proxies'] = [] 
+                # Don't overwrite proxies if they exist, unless explicitly uploading proxies
+                if 'proxies' not in user_sessions[user_id]:
+                    user_sessions[user_id]['proxies'] = []
                 
                 # === GATE MENU ===
                 markup = types.InlineKeyboardMarkup(row_width=1)
                 markup.add(
-                types.InlineKeyboardButton("🛍️ Shopify Mass (Multi-Site)", callback_data="run_mass_shopify"),
-                types.InlineKeyboardButton("🅿️ PayPal (Science) - $1", callback_data="run_mass_paypal_sci"),
-                types.InlineKeyboardButton("🅿️ PayPal (SFTS) - $1", callback_data="run_mass_paypal_sfts"),
-                types.InlineKeyboardButton("💳 Stripe Auth (Assoc)", callback_data="run_mass_stripe_assoc"),
-                types.InlineKeyboardButton("🌩️ HostArmada (Stripe)", callback_data="run_mass_hostarmada"),
-                types.InlineKeyboardButton("❌ Cancel", callback_data="action_cancel")
-            )
+                    types.InlineKeyboardButton("🛍️ Shopify Mass (Multi-Site)", callback_data="run_mass_shopify"),
+                    types.InlineKeyboardButton("🅿️ PayPal (Science) - $1", callback_data="run_mass_paypal_sci"),
+                    types.InlineKeyboardButton("🅿️ PayPal (SFTS) - $1", callback_data="run_mass_paypal_sfts"),
+                    types.InlineKeyboardButton("💳 Stripe Auth (Assoc)", callback_data="run_mass_stripe_assoc"),
+                    types.InlineKeyboardButton("🌩️ HostArmada (Stripe)", callback_data="run_mass_hostarmada"),
+                    types.InlineKeyboardButton("❌ Cancel", callback_data="action_cancel")
+                )
                 
                 bot.edit_message_text(
                     f"📂 <b>File:</b> <code>{file_name}</code>\n"
@@ -226,14 +247,50 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
                     message.chat.id, msg_loading.message_id, reply_markup=markup, parse_mode='HTML'
                 )
             else:
-                # Check for proxies if no CCs
-                proxies = [line.strip() for line in file_content.split('\n') if ':' in line]
-                if proxies:
+                # 2. If no CCs, assume it is a PROXY file
+                raw_proxies = [line.strip() for line in file_content.split('\n') if ':' in line]
+                
+                if raw_proxies:
+                    bot.edit_message_text(f"⚡ <b>Checking {len(raw_proxies)} Proxies...</b>\n<i>Filtering dead ones...</i>", message.chat.id, msg_loading.message_id, parse_mode='HTML')
+                    
+                    live_proxies = []
+                    
+                    # Check proxies concurrently
+                    with ThreadPoolExecutor(max_workers=50) as executor:
+                        futures = {executor.submit(check_proxy_live, p): p for p in raw_proxies}
+                        
+                        checked = 0
+                        for future in as_completed(futures):
+                            result = future.result()
+                            if result:
+                                live_proxies.append(result)
+                            checked += 1
+                            
+                            # Optional: Update UI every 50 checks (can remove to make it faster)
+                            if checked % 50 == 0:
+                                try:
+                                    bot.edit_message_text(
+                                        f"⚡ <b>Checking Proxies...</b>\n"
+                                        f"Total: {len(raw_proxies)}\n"
+                                        f"Checked: {checked}\n"
+                                        f"✅ Live: {len(live_proxies)}", 
+                                        message.chat.id, msg_loading.message_id, parse_mode='HTML'
+                                    )
+                                except: pass
+
+                    # Save ONLY LIVE proxies to session
                     user_id = message.from_user.id
                     if user_id not in user_sessions: user_sessions[user_id] = {}
-                    user_sessions[user_id]['proxies'] = proxies
+                    user_sessions[user_id]['proxies'] = live_proxies
                     
-                    bot.edit_message_text(f"🔌 <b>Proxies Loaded:</b> {len(proxies)}\n✅ You can now run Mass Check.", message.chat.id, msg_loading.message_id, parse_mode='HTML')
+                    bot.edit_message_text(
+                        f"✅ <b>Proxy Check Complete</b>\n\n"
+                        f"📂 Total Found: {len(raw_proxies)}\n"
+                        f"🟢 <b>Live Loaded:</b> {len(live_proxies)}\n"
+                        f"🔴 Dead Discarded: {len(raw_proxies) - len(live_proxies)}\n\n"
+                        f"✅ You can now run Mass Check.", 
+                        message.chat.id, msg_loading.message_id, parse_mode='HTML'
+                    )
                 else:
                     bot.edit_message_text("❌ No valid CCs or Proxies found.", message.chat.id, msg_loading.message_id)
 
@@ -647,4 +704,5 @@ def send_final(bot, chat_id, mid, total, results, duration):
 <b>Total:</b> {total} | <b>Time:</b> {duration:.2f}s
 """
     try: bot.edit_message_text(msg, chat_id, mid, parse_mode='HTML')
+
     except: bot.send_message(chat_id, msg, parse_mode='HTML')
