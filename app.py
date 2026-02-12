@@ -24,7 +24,7 @@ socket.setdefaulttimeout(30)
 from collections import Counter
 import logging
 logger = logging.getLogger(__name__)
-from complete_handler import setup_complete_handler
+from complete_handler import setup_complete_handler, get_bin_info
 from shopify_checker import check_site_shopify_direct, process_response_shopify
 
     
@@ -3584,6 +3584,7 @@ setup_complete_handler(
     update_stats,           # ← FIXED stats
     save_json,
     is_user_allowed
+    load_bin_database()
 )
 
 def is_valid_response(api_response):
