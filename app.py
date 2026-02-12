@@ -1226,8 +1226,6 @@ def update_stats(status, mass_check=False):
         else:
             stats_data[key] += 1
     
-    # Save to file
-    save_json(STATS_FILE, stats_data)
     
     # Console logging
     total = sum(stats_data.values())
