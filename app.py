@@ -3553,19 +3553,18 @@ def get_filtered_sites():
         return sites_list
     return [s for s in sites_list if float(s.get('price', 999)) <= price_filter]
 
-
 setup_complete_handler(
-    bot,                    # bot
-    get_filtered_sites,     # ← FIXED sites func
-    proxies_data,           # proxies_data (array OK)
+    bot,
+    get_filtered_sites,
+    proxies_data,
     check_site_shopify_direct,
-    is_valid_response,      # ← FIXED validation
+    is_valid_response,
     process_response_shopify,
-    update_stats,           # ← FIXED stats
+    update_stats,
     save_json,
-    is_user_allowed,
-    load_bin_database()
+    is_user_allowed
 )
+
 
 def is_valid_response(api_response):
     """
@@ -3594,7 +3593,15 @@ if __name__ == "__main__":
       
     
     print("🚀 Bot started...")
-    
+    try:
+        from complete_handler import load_bin_database
+        print("📂 Loading BIN Database...")
+        load_bin_database()
+        print("✅ BIN Database Loaded!")
+    except ImportError:
+        print("⚠️ Warning: Could not import load_bin_database")
+    except Exception as e:
+        print(f"❌ Error loading BINs: {e}")
     # 2. Then start the infinite loop for the bot
     while True:
         try:
