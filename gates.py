@@ -35,8 +35,7 @@ def format_proxy(proxy):
 # 🚪 GATE 1: PayPal Commerce (Science)
 # 📄 Source: pp.py / pa.py
 # ============================================================================
-
-def check_paypal_science(cc, proxy=None):
+ def check_paypal_science(cc, proxy=None):
     """
     Improved PayPal Commerce gate (GiveWP) – based on working script.
     Uses atlanticcitytheatrecompany.com as the target site.
