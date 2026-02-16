@@ -2,15 +2,15 @@ import requests
 import json
 import traceback
 import urllib3
-import random
-import re
 import time
-# Disable SSL warnings (optional, if you make direct calls)
+import random
+
+# Disable SSL warnings (optional)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 # ==========================================
-# HELPER FUNCTIONS (kept for compatibility)
+# HELPER FUNCTIONS
 # ==========================================
 
 def format_proxy(proxy):
@@ -28,6 +28,17 @@ def format_proxy(proxy):
     except:
         pass
     return None
+
+
+def get_random_ua():
+    """Return a random User-Agent string (for potential future use)."""
+    ua_list = [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+        'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36'
+    ]
+    return random.choice(ua_list)
 
 
 # ==========================================
@@ -58,8 +69,13 @@ def check_site_shopify_direct(site_url, cc, proxy=None):
         if proxy:
             params['proxy'] = proxy
 
+        # Optional: add a random User-Agent to the request (though the API may not care)
+        headers = {
+            'User-Agent': get_random_ua()
+        }
+
         # Make the request (timeout 30 seconds)
-        response = requests.get(api_url, params=params, timeout=30)
+        response = requests.get(api_url, params=params, headers=headers, timeout=30)
         data = response.json()
 
         # Extract fields from API response
@@ -78,7 +94,7 @@ def check_site_shopify_direct(site_url, cc, proxy=None):
         elif 'insufficient' in resp_lower:
             status = 'APPROVED'          # treat insufficient funds as live
         elif 'cvv' in resp_lower:
-            status = 'APPROVED'           # treat CVV mismatch as live
+            status = 'APPROVED'          # treat CVV mismatch as live
         elif 'do not honor' in resp_lower:
             status = 'DECLINED'
         else:
@@ -113,6 +129,36 @@ def check_site_shopify_direct(site_url, cc, proxy=None):
 
 
 # ==========================================
+# RESPONSE PARSER – USED BY app.py
+# ==========================================
+
+def process_response_shopify(api_response, site_price='0'):
+    """
+    Processes the dictionary returned by check_site_shopify_direct
+    and returns a tuple (message, status, gateway) as expected by app.py.
+    """
+    try:
+        if not api_response or not isinstance(api_response, dict):
+            return "System Error", "ERROR", "Unknown"
+
+        status = api_response.get('status', 'ERROR').upper()
+        message = api_response.get('Response', 'Unknown Result')
+        gateway = api_response.get('gateway', 'Shopify Payments')
+
+        # Map status to what app.py expects
+        if status == 'APPROVED':
+            # Check if OTP or 3DS is mentioned
+            if 'otp' in message.lower() or 'authentication' in message.lower():
+                status = 'APPROVED_OTP'
+        elif status == 'DECLINED':
+            pass  # keep as is
+        else:
+            status = 'ERROR'
+
+        return message, status, gateway
+
+    except Exception as e:
+        return f"Parse Error: {e}", "ERROR", "Unknown"# ==========================================
 # RESPONSE PARSER (unchanged, used by app.py)
 # ==========================================
 
@@ -881,4 +927,5 @@ def process_response_shopify(api_response, site_price='0'):
     except Exception as e:
 
         return f"Parse Error: {e}", "ERROR", "Unknown"
+
 
