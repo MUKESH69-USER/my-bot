@@ -501,8 +501,10 @@ def process_mass_gate_check(bot, message, ccs, gate_func, gate_name, proxies):
             elif len(parts) == 4:
                 url = f"http://{parts[2]}:{parts[3]}@{parts[0]}:{parts[1]}"
             else:
-                return None
-            r = requests.get("http://httpbin.org/ip", proxies={'http': url, 'https': url}, timeout=5)
+                 return None
+            proxies_dict = {'http': url, 'https': url}
+        # Test with a real HTTPS endpoint that requires SSL handshake
+            r = requests.get("https://httpbin.org/ip", proxies=proxies_dict, timeout=10, verify=False)
             return p if r.status_code == 200 else None
         except:
             return None
@@ -537,24 +539,36 @@ def process_mass_gate_check(bot, message, ccs, gate_func, gate_name, proxies):
     last_update_time = time.time()
 
     def worker(cc):
-        proxy = random.choice(proxies)
-        try:
-            response_text, status = gate_func(cc, proxy)
-            return {
-                "cc": cc,
-                "response": response_text,
-                "status": status,
-                "gateway": gate_name,
-                "site_url": "API"
-            }
-        except Exception as e:
-            return {
-                "cc": cc,
-                "response": str(e),
-                "status": "ERROR",
-                "gateway": gate_name,
-                "site_url": "API"
-            }
+        max_tries = 3
+        tried_proxies = []
+        for attempt in range(max_tries):
+            # Pick a proxy not tried before (if enough live proxies)
+            available = [p for p in proxies if p not in tried_proxies]
+            if not available:
+                break
+            proxy = random.choice(available)
+            tried_proxies.append(proxy)
+            try:
+                response_text, status = gate_func(cc, proxy)
+            # Even if the gate returns "DECLINED", that's a valid result
+                return {
+                    "cc": cc,
+                    "response": response_text,
+                    "status": status,
+                    "gateway": gate_name,
+                    "site_url": "API"
+                }
+            except Exception as e:
+                print(f"Attempt {attempt+1} failed for {cc} with proxy {proxy}: {e}")
+                continue
+    # All attempts failed
+        return {
+            "cc": cc,
+            "response": "All proxies failed",
+            "status": "ERROR",
+            "gateway": gate_name,
+            "site_url": "API"
+         }
 
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {executor.submit(worker, cc): cc for cc in ccs}
@@ -670,6 +684,7 @@ def send_final(bot, chat_id, mid, total, results, duration):
     try: bot.edit_message_text(msg, chat_id, mid, parse_mode='HTML')
 
     except: bot.send_message(chat_id, msg, parse_mode='HTML')
+
 
 
 
