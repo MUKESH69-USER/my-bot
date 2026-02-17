@@ -485,44 +485,48 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
 # ============================================================================
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-def validate_proxy(proxy):
-    try:
-        parts = proxy.split(':')
-        if len(parts) == 2:
-            url = f"http://{parts[0]}:{parts[1]}"
-        elif len(parts) == 4:
-            url = f"http://{parts[2]}:{parts[3]}@{parts[0]}:{parts[1]}"
-        else:
-            return None
-        r = requests.get("http://httpbin.org/ip", proxies={'http': url, 'https': url}, timeout=5)
-        return proxy if r.status_code == 200 else None
-    except:
-        return None
-
-# Before mass check:
-live_proxies = []
-with ThreadPoolExecutor(max_workers=50) as executor:
-    futures = {executor.submit(validate_proxy, p): p for p in proxies}
-    for future in as_completed(futures):
-        if future.result():
-            live_proxies.append(future.result())
-proxies = live_proxies
-
 def process_mass_gate_check(bot, message, ccs, gate_func, gate_name, proxies):
     """
-    Full version with Progress Bar, Live Hits, and Error Handling.
+    Full version with proxy validation, Progress Bar, Live Hits, and Error Handling.
     """
     total = len(ccs)
-    # Results dictionary initialize kar rahe hain
     results = {"live": [], "dead": [], "error": []}
-    
-    # 1. Starting Message bhejna
+
+    # --- 1. Validate proxies first ---
+    def validate_proxy(p):
+        try:
+            parts = p.split(':')
+            if len(parts) == 2:
+                url = f"http://{parts[0]}:{parts[1]}"
+            elif len(parts) == 4:
+                url = f"http://{parts[2]}:{parts[3]}@{parts[0]}:{parts[1]}"
+            else:
+                return None
+            r = requests.get("http://httpbin.org/ip", proxies={'http': url, 'https': url}, timeout=5)
+            return p if r.status_code == 200 else None
+        except:
+            return None
+
+    live_proxies = []
+    with ThreadPoolExecutor(max_workers=50) as executor:
+        futures = {executor.submit(validate_proxy, p): p for p in proxies}
+        for future in as_completed(futures):
+            if future.result():
+                live_proxies.append(future.result())
+
+    if not live_proxies:
+        bot.send_message(message.chat.id, "❌ No live proxies available. Aborting.")
+        return
+
+    proxies = live_proxies   # use only live ones
+    # --- proxy validation done ---
+
     try:
         status_msg = bot.send_message(
             message.chat.id,
             f"<b>⚡ {gate_name} Started...</b>\n"
             f"💳 Cards: {total}\n"
-            f"🌐 Proxies: {len(proxies)}",
+            f"🌐 Live Proxies: {len(proxies)}",
             parse_mode="HTML"
         )
     except:
@@ -532,23 +536,16 @@ def process_mass_gate_check(bot, message, ccs, gate_func, gate_name, proxies):
     start_time = time.time()
     last_update_time = time.time()
 
-    # --- Worker Function (Jo har card ko check karega) ---
     def worker(cc):
-        if not proxies:
-            return {"cc": cc, "response": "No Proxies", "status": "ERROR"}
-            
         proxy = random.choice(proxies)
-        
         try:
-            # Gate function call (ccs aur proxy pass karke)
             response_text, status = gate_func(cc, proxy)
-            
             return {
                 "cc": cc,
                 "response": response_text,
                 "status": status,
                 "gateway": gate_name,
-                "site_url": "API" # Ya fir gate_func se URL return karwa sakte hain
+                "site_url": "API"
             }
         except Exception as e:
             return {
@@ -559,39 +556,28 @@ def process_mass_gate_check(bot, message, ccs, gate_func, gate_name, proxies):
                 "site_url": "API"
             }
 
-    # 2. Multi-threading start (Fast checking ke liye)
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {executor.submit(worker, cc): cc for cc in ccs}
-        
+
         for future in as_completed(futures):
             processed += 1
-            cc = futures[future]
-            
             try:
                 res = future.result()
                 status = res["status"]
-                
-                # 3. Result Categorization
+
                 if status == "APPROVED" or status == "CHARGED" or "CVV" in status:
                     results["live"].append(res)
-                    # Live hit turant bhejo
                     send_hit(bot, message.chat.id, res, f"✅ {gate_name} LIVE")
-                    
                 elif status == "DECLINED":
                     results["dead"].append(res)
                 else:
                     results["error"].append(res)
-            
             except Exception as e:
-                # Agar worker crash ho jaye
-                results["error"].append({"cc": cc, "response": str(e), "status": "ERROR"})
+                results["error"].append({"cc": futures[future], "response": str(e), "status": "ERROR"})
 
-            # 4. Update UI (Har 2-3 second mein message edit karna)
             if time.time() - last_update_time > 2.5 or processed == total:
                 try:
-                    # Progress bar banana
                     progress = create_progress_bar(processed, total)
-                    
                     msg_text = (
                         f"<b>⚡ {gate_name} Checking...</b>\n"
                         f"{progress}\n"
@@ -600,18 +586,11 @@ def process_mass_gate_check(bot, message, ccs, gate_func, gate_name, proxies):
                         f"❌ <b>Dead:</b> {len(results['dead'])}\n"
                         f"⚠️ <b>Errors:</b> {len(results['error'])}"
                     )
-                    
-                    bot.edit_message_text(
-                        msg_text, 
-                        message.chat.id, 
-                        status_msg.message_id, 
-                        parse_mode="HTML"
-                    )
+                    bot.edit_message_text(msg_text, message.chat.id, status_msg.message_id, parse_mode="HTML")
                     last_update_time = time.time()
-                except Exception:
-                    pass # Agar edit fail ho jaye (rate limit) to ignore karein
+                except:
+                    pass
 
-    # 5. Final Summary Message
     duration = time.time() - start_time
     final_text = (
         f"<b>✅ {gate_name} Completed</b>\n"
@@ -622,7 +601,7 @@ def process_mass_gate_check(bot, message, ccs, gate_func, gate_name, proxies):
         f"⚠️ <b>Errors:</b> {len(results['error'])}\n"
         f"⏱️ <b>Time Taken:</b> {duration:.2f}s"
     )
-    
+
     try:
         bot.edit_message_text(final_text, message.chat.id, status_msg.message_id, parse_mode="HTML")
     except:
@@ -691,6 +670,7 @@ def send_final(bot, chat_id, mid, total, results, duration):
     try: bot.edit_message_text(msg, chat_id, mid, parse_mode='HTML')
 
     except: bot.send_message(chat_id, msg, parse_mode='HTML')
+
 
 
 
