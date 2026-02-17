@@ -1612,46 +1612,82 @@ def handle_approve_user(message):
     if not is_owner(message.from_user.id):
         bot.reply_to(message, "🚫 Owner only command.")
         return
-    
     try:
         parts = message.text.split()
         if len(parts) != 3:
             bot.reply_to(message, "Usage: /pro <user_id> <days>")
             return
-        
         user_id = parts[1]
         days = int(parts[2])
-        
-        # Calculate expiry date
         expiry_date = datetime.now() + timedelta(days=days)
-        
-        # Add user to approved list
+
+        # Add user with default limit = 1000
         users_data[user_id] = {
             'approved_by': message.from_user.id,
             'approved_date': datetime.now().isoformat(),
             'expiry': expiry_date.isoformat(),
-            'days': days
+            'days': days,
+            'limit': 1000   # default limit
         }
-        
         save_json(USERS_FILE, users_data)
-        
-        # Try to send notification to user
         try:
             bot.send_message(
                 user_id,
                 f"🎉 <b>Access Granted!</b>\n\n"
                 f"You have been approved to use this bot for {days} days.\n"
+                f"Your card limit per mass check: 1000.\n"
                 f"Your access will expire on: {expiry_date.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
                 f"Enjoy cooking! 🔥",
                 parse_mode='HTML'
             )
         except:
             pass
-        
-        bot.reply_to(message, f"✅ User {user_id} approved for {days} days. Expiry: {expiry_date.strftime('%Y-%m-%d %H:%M:%S')}")
-        
+        bot.reply_to(message, f"✅ User {user_id} approved for {days} days. Limit: 1000. Expiry: {expiry_date.strftime('%Y-%m-%d %H:%M:%S')}")
     except Exception as e:
         bot.reply_to(message, f"❌ Error: {str(e)}")
+
+@bot.message_handler(commands=['limit'])
+def handle_set_limit(message):
+    if not is_owner(message.from_user.id):
+        bot.reply_to(message, "🚫 Owner only command.")
+        return
+    try:
+        parts = message.text.split()
+        if len(parts) != 3:
+            bot.reply_to(message, "Usage: /limit <user_id> <new_limit>")
+            return
+        user_id = parts[1]
+        new_limit = int(parts[2])
+        if new_limit < 1:
+            bot.reply_to(message, "❌ Limit must be at least 1.")
+            return
+
+        # Check if user exists in database
+        if user_id not in users_data:
+            bot.reply_to(message, f"❌ User {user_id} not found in database.")
+            return
+
+        # Update limit
+        users_data[user_id]['limit'] = new_limit
+        save_json(USERS_FILE, users_data)
+
+        # Notify user (optional)
+        try:
+            bot.send_message(
+                user_id,
+                f"🔄 <b>Your mass check limit has been updated!</b>\n\n"
+                f"New limit: <code>{new_limit}</code> cards per upload.",
+                parse_mode='HTML'
+            )
+        except:
+            pass
+
+        bot.reply_to(message, f"✅ Limit for user {user_id} set to {new_limit}.")
+    except ValueError:
+        bot.reply_to(message, "❌ Invalid number format.")
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error: {str(e)}")
+
 
 @bot.message_handler(commands=['grant'])
 def handle_approve_group(message):
@@ -3549,7 +3585,8 @@ setup_complete_handler(
     process_response_shopify,
     update_stats,
     save_json,
-    is_user_allowed
+    is_user_allowed,
+    users_data   # <-- add this
 )
 
 
