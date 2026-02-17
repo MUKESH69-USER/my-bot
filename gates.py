@@ -316,7 +316,6 @@ def check_paypal_science(cc, proxy=None):
                 return "Unknown Error", "ERROR"
 
     except Exception as e:
-    import traceback
     print(f"❌ PayPal Science error: {traceback.format_exc()}")
     return f"Process Error: {str(e)}", "ERROR"
 
