@@ -483,6 +483,30 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
 # ============================================================================
 # 🧠 MASS CHECK ENGINE (FULL VERSION)
 # ============================================================================
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+def validate_proxy(proxy):
+    try:
+        parts = proxy.split(':')
+        if len(parts) == 2:
+            url = f"http://{parts[0]}:{parts[1]}"
+        elif len(parts) == 4:
+            url = f"http://{parts[2]}:{parts[3]}@{parts[0]}:{parts[1]}"
+        else:
+            return None
+        r = requests.get("http://httpbin.org/ip", proxies={'http': url, 'https': url}, timeout=5)
+        return proxy if r.status_code == 200 else None
+    except:
+        return None
+
+# Before mass check:
+live_proxies = []
+with ThreadPoolExecutor(max_workers=50) as executor:
+    futures = {executor.submit(validate_proxy, p): p for p in proxies}
+    for future in as_completed(futures):
+        if future.result():
+            live_proxies.append(future.result())
+proxies = live_proxies
 
 def process_mass_gate_check(bot, message, ccs, gate_func, gate_name, proxies):
     """
@@ -667,6 +691,7 @@ def send_final(bot, chat_id, mid, total, results, duration):
     try: bot.edit_message_text(msg, chat_id, mid, parse_mode='HTML')
 
     except: bot.send_message(chat_id, msg, parse_mode='HTML')
+
 
 
 
