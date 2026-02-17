@@ -4,7 +4,7 @@ import urllib3
 import random
 
 # Disable SSL warnings
-urllib3.disable_warnings(ur3llib3.exceptions.InsecureRequestWarning)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)   # Fixed typo
 
 # ============================================================================
 # HELPER: Format proxy for requests
@@ -49,7 +49,7 @@ def check_site_shopify_direct(site_url, cc, proxy=None):
     if proxy:
         params['proxy'] = proxy
 
-    # Optional: rotate user‑agent to avoid blocking
+    # Rotate user‑agent to avoid blocking
     user_agents = [
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
