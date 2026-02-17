@@ -1238,73 +1238,69 @@ def get_filtered_sites():
 def send_welcome(message):
     user_name = message.from_user.first_name or "User"
     welcome_text = f"""
-╔══════════════════════════════════╗
-║     🔥 𝐍𝐎𝐕𝐀 𝐂𝐂 𝐂𝐇𝐄𝐂𝐊𝐄𝐑 🔥      ║
-╚══════════════════════════════════╝
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃      🔥 𝐍𝐎𝐕𝐀 𝐂𝐂 𝐂𝐇𝐄𝐂𝐊𝐄𝐑 🔥     ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+Welcome, {user_name}!
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-👋 **Welcome, {user_name}!**
+🌐 PROXIES – REQUIRED
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+All checks run through proxies to protect the gates.  
+Add proxies using:
 
-🌐 **PROXIES – REQUIRED**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-All checks run through proxies to protect your privacy and the gates.  
-Add proxies using one of these methods:
-
-• **Single proxy:** `/addpro ip:port:user:pass`  
-• **Bulk upload:** Send a `.txt` file with one proxy per line  
-  (format: `ip:port:user:pass` or `ip:port`)
+• `/addpro ip:port:user:pass` – single proxy  
+• Upload a `.txt` file (bulk) – format: `ip:port:user:pass` or `ip:port`
 
 Proxies are saved to your personal pool and reused.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📁 **HOW TO CHECK CARDS**
+📁 HOW TO CHECK CARDS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1️⃣ Prepare a `.txt` file with cards:  
+   <code>CC|MM|YYYY|CVV</code> (one per line)
 
-**Step 1 – Prepare your card file**  
-Create a `.txt` file with cards in format:  
-<code>CC|MM|YYYY|CVV</code> (one per line)
+2️⃣ Upload the file.  
+   • Daily limit checked (default 10,000 cards/day).  
+   • If file exceeds per‑upload limit (default 1000), only the first N cards are taken.
 
-**Step 2 – Upload your card file**  
-• The bot checks your daily limit (default 10,000 cards/day).  
-• If the file exceeds your per‑upload limit (default 1000), only the first N cards are taken.
+3️⃣ Choose a gate from the buttons that appear:  
+   🅿️ PayPal SFTS  •  🏫 Morris.edu  •  ⚡ NYEnergy  •  🌱 PlantVine
 
-**Step 3 – Choose a gate**  
-After upload, you'll see buttons for each working gate:  
-🅿️ PayPal SFTS  |  🏫 Morris.edu  |  ⚡ NYEnergy  |  🌱 PlantVine  
-Click one – the mass check starts immediately.
+Mass check starts immediately.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎮 **SINGLE CARD CHECK**
+🎮 SINGLE CARD CHECK
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• `/sh CC|MM|YYYY|CVV` – Uses a random proxy from your pool.  
+• `/sh CC|MM|YYYY|CVV` – uses a random proxy from your pool.  
 • Aliases: `/s`, `.sh`, `.s`, `cook`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🛑 **STOP A RUNNING CHECK**
+🛑 STOP A RUNNING CHECK
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• `/stop` – Aborts the current mass check.  
+• `/stop` – aborts the current mass check.  
   Cards already processed still count toward your daily limit.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 **YOUR LIMITS**
+📊 YOUR LIMITS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• **Per upload:** 1000 cards (adjustable by owner)  
-• **Daily total:** 10000 cards (resets at midnight UTC)  
-• **Concurrent checks:** One at a time
+• Per upload: 1000 cards (adjustable by owner)  
+• Daily total: 10000 cards (resets at midnight)  
+• Concurrent checks: One at a time
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📚 **NEED HELP?**
+📚 HELP
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• `/help` – Quick command reference.  
+• `/help` – quick command reference.  
 • Owner commands are private – only the bot owner can see them.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-<b>Bot By:</b> <a href="tg://user?id={DARKS_ID}">⏤‌‌Unknownop ꯭𖠌</a>  
-<b>Channel:</b> @Nova_bot_update
+<b>Bot by:</b> <a href="tg://user?id={DARKS_ID}">⏤‌‌Unknownop ꯭𖠌</a>  |  @Nova_bot_update
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
     bot.reply_to(message, welcome_text, parse_mode='HTML')
+
 
 @bot.message_handler(commands=['help'])
 @flood_control
