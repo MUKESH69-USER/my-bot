@@ -396,23 +396,17 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
             set_user_busy(user_id, False)
             return
         active_proxies = []
-        user_proxies = user_sessions[user_id].get('proxies', [])
-        if user_proxies:
-            active_proxies = validate_proxies_strict(user_proxies, bot, message)
-            source = f"🔒 User ({len(active_proxies)})"
-        else:
-            server_proxies = proxies_data.get('proxies', [])
-            if server_proxies:
-                active_proxies = server_proxies
-                source = f"🌍 Server ({len(active_proxies)})"
-            else:
-                bot.send_message(message.chat.id, "❌ <b>No Proxies Available!</b> Upload proxies or add server proxies.", parse_mode='HTML')
-                set_user_busy(user_id, False)
-                return
-        if not active_proxies:
-            bot.send_message(message.chat.id, "❌ <b>All Proxies Dead.</b>", parse_mode='HTML')
+        proxies = get_active_proxies(user_id)
+        if not proxies:
+            bot.send_message(message.chat.id, "🚫 <b>Proxy Required!</b> Add proxies via /addpro or upload a proxy file.", parse_mode='HTML')
             set_user_busy(user_id, False)
             return
+        active_proxies = validate_proxies_strict(proxies, bot, message)
+        if not active_proxies:
+            bot.send_message(message.chat.id, "❌ <b>All your proxies are dead.</b>", parse_mode='HTML')
+            set_user_busy(user_id, False)
+            return
+        source = f"🔒 User ({len(active_proxies)})"
         start_msg = bot.send_message(message.chat.id, f"🔥 <b>Starting...</b>\n💳 {len(ccs)} Cards\n🔌 {source}", parse_mode='HTML')
         threading.Thread(
             target=process_mass_check_engine,
@@ -747,3 +741,4 @@ def send_final(bot, chat_id, mid, total, results, duration):
         bot.edit_message_text(msg, chat_id, mid, parse_mode='HTML')
     except:
         bot.send_message(chat_id, msg, parse_mode='HTML')
+
