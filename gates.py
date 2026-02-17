@@ -6,6 +6,7 @@ import time
 import uuid
 import json
 import cloudscraper
+import traceback
 from requests_toolbelt.multipart.encoder import MultipartEncoder
 from user_agent import generate_user_agent
 
@@ -315,7 +316,9 @@ def check_paypal_science(cc, proxy=None):
                 return "Unknown Error", "ERROR"
 
     except Exception as e:
-        return f"Process Error: {str(e)}", "ERROR"
+    import traceback
+    print(f"❌ PayPal Science error: {traceback.format_exc()}")
+    return f"Process Error: {str(e)}", "ERROR"
 
 # ============================================================================
 # 🚪 GATE 2: PayPal Commerce (SFTS)
