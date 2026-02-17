@@ -1336,7 +1336,7 @@ def send_owner_help(message):
     if not is_owner(message.from_user.id):
         bot.reply_to(message, "🚫 Owner only command.")
         return
-        
+
     help_text = f"""
 <b>🔥 OWNER COMMANDS 🔥</b>
 
@@ -1371,7 +1371,6 @@ def send_owner_help(message):
 <b>Bot By:</b> <a href="tg://user?id={DARKS_ID}">⏤‌‌Unknownop ꯭𖠌</a>
 """
     bot.reply_to(message, help_text, parse_mode='HTML')
-
 
 @bot.message_handler(commands=['sh' , 's'])
 @bot.message_handler(func=lambda m: m.text and (m.text.startswith('.sh') or m.text.startswith('.s') or m.text.lower().startswith('cook')))
