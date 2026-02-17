@@ -1851,21 +1851,22 @@ def handle_approve_group(message):
 def handle_list_users(message):
     if not is_owner(message.from_user.id):
         return
-    
+
     if not users_data:
         bot.reply_to(message, "No approved users found.")
         return
-    
+
+    # Load user proxies to count them
+    user_proxies = load_json(USER_PROXIES_FILE, {})
+
     users_list = "<b>👥 Approved Users:</b>\n\n"
-    
-    # Iterate with error handling to prevent crashes
+
     for user_id, data in users_data.items():
         try:
-            # Handle missing or invalid expiry
             expiry_str = data.get('expiry')
             status = "✅ Active"
             days_left_str = "Unknown"
-            
+
             if expiry_str:
                 try:
                     expiry_date = datetime.fromisoformat(expiry_str)
@@ -1879,17 +1880,20 @@ def handle_list_users(message):
                 status = "🔥 Lifetime"
                 days_left_str = "∞"
 
+            # Get user's proxy count
+            proxy_count = len(user_proxies.get(user_id, []))
+
             users_list += f"🆔 <code>{user_id}</code>\n"
             users_list += f"📅 Time Left: {days_left_str}\n"
+            users_list += f"📊 Per‑upload limit: {data.get('limit', 1000)}\n"
+            users_list += f"🌐 Proxies added: {proxy_count}\n"
             users_list += f"🔰 Status: {status}\n"
             users_list += "━━━━━━━━━━━━━━━━━━━\n"
-            
+
         except Exception as e:
-            # If one user fails, just log it and continue to the next
             print(f"Error listing user {user_id}: {e}")
             continue
-    
-    # Split message if it's too long for Telegram
+
     if len(users_list) > 4000:
         for x in range(0, len(users_list), 4000):
             bot.reply_to(message, users_list[x:x+4000], parse_mode='HTML')
