@@ -1346,18 +1346,18 @@ def send_owner_help(message):
 • /addproxies – Add proxies from .txt file
 • /clean – Remove dead sites
 • /cleanpro – Remove dead proxies
-• /rsite <url> – Remove a site
+• /rsite &lt;url&gt; – Remove a site
 • /rmsites – Remove all sites
 • /rmpro – Remove all proxies
 • /viewsites – List all sites
 
 <code>User Management:</code>
-• /pro <userid> <days> – Approve user (default limit 1000)
-• /limit <userid> <new_limit> – Change per‑upload limit
-• /setlimit <userid> <daily_limit> – Change daily total limit
-• /resetusage <userid> – Reset today's usage
-• /rmuser <userid> – Remove user
-• /grant <chatid> – Approve group
+• /pro &lt;userid&gt; &lt;days&gt; – Approve user (default limit 1000)
+• /limit &lt;userid&gt; &lt;new_limit&gt; – Change per‑upload limit
+• /setlimit &lt;userid&gt; &lt;daily_limit&gt; – Change daily total limit
+• /resetusage &lt;userid&gt; – Reset today's usage
+• /rmuser &lt;userid&gt; – Remove user
+• /grant &lt;chatid&gt; – Approve group
 • /users – List approved users
 • /groups – List approved groups
 
@@ -1371,6 +1371,7 @@ def send_owner_help(message):
 <b>Bot By:</b> <a href="tg://user?id={DARKS_ID}">⏤‌‌Unknownop ꯭𖠌</a>
 """
     bot.reply_to(message, help_text, parse_mode='HTML')
+
 
 @bot.message_handler(commands=['sh' , 's'])
 @bot.message_handler(func=lambda m: m.text and (m.text.startswith('.sh') or m.text.startswith('.s') or m.text.lower().startswith('cook')))
