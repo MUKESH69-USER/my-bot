@@ -3512,17 +3512,17 @@ def handle_price_callback(call):
         bot.answer_callback_query(call.id, "Invalid price value!")
 def is_user_allowed(userid):
     """Complete handler auth - owners + approved users"""
-    if userid in OWNER_ID:  # ← YOUR OWNER LIST
+    if userid in OWNER_ID:
         return True
-    
     try:
         userdata = users_data.get(str(userid))
         if not userdata:
             return False
-        expiry_date_str = userdata.get('expiry_date')
-        if not expiry_date_str:
+        # Try both possible keys
+        expiry_str = userdata.get('expiry') or userdata.get('expiry_date')
+        if not expiry_str:
             return False
-        expiry_date = datetime.fromisoformat(expiry_date_str)
+        expiry_date = datetime.fromisoformat(expiry_str)
         return datetime.now() <= expiry_date
     except:
         return False
