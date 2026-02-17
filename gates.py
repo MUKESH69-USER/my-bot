@@ -53,7 +53,6 @@ def check_paypal_science(cc, proxy=None):
 
         # 2. Setup session with cloudscraper (to bypass Cloudflare)
         session = cloudscraper.create_scraper()
-        session.verify = False
 
         if proxy:
             proxies_dict = format_proxy(proxy)   # call local function
