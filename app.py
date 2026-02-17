@@ -1236,51 +1236,101 @@ def get_filtered_sites():
 @flood_control
 @check_access
 def send_welcome(message):
-    help_text = """
-<b>🔥 Welcome to Nova Shopify CC Checker Bot! 🔥</b>
+    user_name = message.from_user.first_name or "User"
+    welcome_text = f"""
+╔══════════════════════════════════╗
+║     🔥 𝐍𝐎𝐕𝐀 𝐂𝐂 𝐂𝐇𝐄𝐂𝐊𝐄𝐑 🔥      ║
+╚══════════════════════════════════╝
 
-<code>Available Commands:</code>
-• /sh CC|MM|YYYY|CVV - Check a card
-• /s CC|MM|YYYY|CVV - Short command for checking
-• .sh CC|MM|YYYY|CVV - Alternative command
-• .s CC|MM|YYYY|CVV - Alternative command
-• cook CC|MM|YYYY|CVV - Alternative command
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+👋 **Welcome, {user_name}!**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-<code>Mass Check Commands:</code>
-• /msh CCs - Check multiple cards (max 1000)
-• .msh CCs - Alternative command
-• hardcook CCs - Alternative command
+🌐 **PROXIES – REQUIRED**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+All checks run through proxies to protect your privacy and the gates.  
+Add proxies using one of these methods:
 
-━━━━━━━━━━━━━━━━━━━
-<b>Bot By:</b> <a href="tg://user?id={DARKS_ID}">⏤‌‌Unknownop ꯭𖠌</a>
-""".format(DARKS_ID=DARKS_ID)
-    bot.reply_to(message, help_text, parse_mode='HTML')
+• **Single proxy:** `/addpro ip:port:user:pass`  
+• **Bulk upload:** Send a `.txt` file with one proxy per line  
+  (format: `ip:port:user:pass` or `ip:port`)
+
+Proxies are saved to your personal pool and reused.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📁 **HOW TO CHECK CARDS**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Step 1 – Prepare your card file**  
+Create a `.txt` file with cards in format:  
+<code>CC|MM|YYYY|CVV</code> (one per line)
+
+**Step 2 – Upload your card file**  
+• The bot checks your daily limit (default 10,000 cards/day).  
+• If the file exceeds your per‑upload limit (default 1000), only the first N cards are taken.
+
+**Step 3 – Choose a gate**  
+After upload, you'll see buttons for each working gate:  
+🅿️ PayPal SFTS  |  🏫 Morris.edu  |  ⚡ NYEnergy  |  🌱 PlantVine  
+Click one – the mass check starts immediately.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎮 **SINGLE CARD CHECK**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• `/sh CC|MM|YYYY|CVV` – Uses a random proxy from your pool.  
+• Aliases: `/s`, `.sh`, `.s`, `cook`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🛑 **STOP A RUNNING CHECK**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• `/stop` – Aborts the current mass check.  
+  Cards already processed still count toward your daily limit.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 **YOUR LIMITS**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• **Per upload:** 1000 cards (adjustable by owner)  
+• **Daily total:** 10000 cards (resets at midnight UTC)  
+• **Concurrent checks:** One at a time
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📚 **NEED HELP?**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• `/help` – Quick command reference.  
+• Owner commands are private – only the bot owner can see them.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>Bot By:</b> <a href="tg://user?id={DARKS_ID}">⏤‌‌Unknownop ꯭𖠌</a>  
+<b>Channel:</b> @Nova_bot_update
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"""
+    bot.reply_to(message, welcome_text, parse_mode='HTML')
 
 @bot.message_handler(commands=['help'])
 @flood_control
 @check_access
 def send_help(message):
-    help_text = """
-<b>🔥 Shopify CC Checker Bot - Help 🔥</b>
+    help_text = f"""
+╔══════════════════════════════╗
+║        🔥 𝐍𝐎𝐕𝐀 𝐇𝐄𝐋𝐏 🔥      ║
+╚══════════════════════════════╝
 
-<code>Card Check Commands:</code>
-• /sh CC|MM|YYYY|CVV - Check a card
-• /s CC|MM|YYYY|CVV - Short command
-• .sh CC|MM|YYYY|CVV - Alternative
-• .s CC|MM|YYYY|CVV - Alternative
-• cook CC|MM|YYYY|CVV - Alternative
+<b>Quick Guide:</b>
+1️⃣ Add proxies (via `/addpro` or .txt file)  
+2️⃣ Upload cards (.txt, `CC|MM|YYYY|CVV`)  
+3️⃣ Choose gate from the buttons  
 
-<code>Mass Check Commands:</code>
-• /msh CCs - Check multiple cards (max 15)
-• .msh CCs - Alternative
-• hardcook CCs - Alternative
+<b>Single check:</b> `/sh CC|MM|YYYY|CVV`  
+<b>Mass check:</b> `/msh` (after uploading cards)  
+<b>Stop:</b> `/stop`  
 
+<b>Limits:</b> 1000 per upload / 10000 daily.
 
+For full details, type /start.
 
-━━━━━━━━━━━━━━━━━━━
-<b>Bot By:</b> <a href="tg://user?id={DARKS_ID}">⏤‌‌unknownop ꯭𖠌</a>
-""".format(DARKS_ID=DARKS_ID)
-    
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>Bot By:</b> <a href="tg://user?id={DARKS_ID}">⏤‌‌Unknownop ꯭𖠌</a>
+"""
     bot.reply_to(message, help_text, parse_mode='HTML')
 
 @bot.message_handler(commands=['owner'])
@@ -1291,37 +1341,41 @@ def send_owner_help(message):
         bot.reply_to(message, "🚫 Owner only command.")
         return
         
-    help_text = """
-<b>🔥 Owner Commands 🔥</b>
+    help_text = f"""
+<b>🔥 OWNER COMMANDS 🔥</b>
 
 <code>Site Management:</code>
-• /addurls [urls] - Add multiple sites
-• /addpro [proxy] - Add a proxy
-• /clean - Clean invalid sites
-• /cleanpro - Clean invalid proxies
-• /rsite or /rmsite or /delsite - Remove single site
-• /rmsites - Remove all sites
-• /rmpro - Remove all proxies
-• /viewsites - View all sites
+• /addurls – Add sites from .txt file
+• /addpro – Add single proxy (ip:port:user:pass)
+• /addproxies – Add proxies from .txt file
+• /clean – Remove dead sites
+• /cleanpro – Remove dead proxies
+• /rsite <url> – Remove a site
+• /rmsites – Remove all sites
+• /rmpro – Remove all proxies
+• /viewsites – List all sites
 
 <code>User Management:</code>
-• /pro [userid] [days] - Approve user
-• /rmuser [userid] - Remove User
-• /grant [chatid] - Approve group
-• /users - List approved users
-• /groups - List approved groups
+• /pro <userid> <days> – Approve user (default limit 1000)
+• /limit <userid> <new_limit> – Change per‑upload limit
+• /setlimit <userid> <daily_limit> – Change daily total limit
+• /resetusage <userid> – Reset today's usage
+• /rmuser <userid> – Remove user
+• /grant <chatid> – Approve group
+• /users – List approved users
+• /groups – List approved groups
 
 <code>Bot Management:</code>
-• /stats - Show bot statistics
-• /ping - Check bot response time
-• /restart - Restart the bot
-• /setamo - Set price filter for checking
+• /stats – Bot statistics
+• /ping – Response time
+• /restart – Restart bot
+• /setamo – Price filter for Shopify
 
 ━━━━━━━━━━━━━━━━━━━
-<b>Bot By:</b> <a href="@Unknown_bolte">⏤‌‌Unknownop ꯭𖠌</a>
-""".format(DARKS_ID=DARKS_ID)
-
+<b>Bot By:</b> <a href="tg://user?id={DARKS_ID}">⏤‌‌Unknownop ꯭𖠌</a>
+"""
     bot.reply_to(message, help_text, parse_mode='HTML')
+
 
 @bot.message_handler(commands=['sh' , 's'])
 @bot.message_handler(func=lambda m: m.text and (m.text.startswith('.sh') or m.text.startswith('.s') or m.text.lower().startswith('cook')))
