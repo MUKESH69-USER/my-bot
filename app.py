@@ -3631,7 +3631,8 @@ setup_complete_handler(
     update_stats,
     save_json,
     is_user_allowed,
-    users_data   # <-- add this
+    users_data,
+    USERS_FILE   # add this
 )
 
 
