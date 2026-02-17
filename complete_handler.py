@@ -486,13 +486,10 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def process_mass_gate_check(bot, message, ccs, gate_func, gate_name, proxies):
-    """
-    Full version with proxy validation, Progress Bar, Live Hits, and Error Handling.
-    """
     total = len(ccs)
     results = {"live": [], "dead": [], "error": []}
 
-    # --- 1. Validate proxies first ---
+    # ----- PROXY VALIDATION (HTTPS) -----
     def validate_proxy(p):
         try:
             parts = p.split(':')
@@ -501,9 +498,8 @@ def process_mass_gate_check(bot, message, ccs, gate_func, gate_name, proxies):
             elif len(parts) == 4:
                 url = f"http://{parts[2]}:{parts[3]}@{parts[0]}:{parts[1]}"
             else:
-                 return None
+                return None
             proxies_dict = {'http': url, 'https': url}
-        # Test with a real HTTPS endpoint that requires SSL handshake
             r = requests.get("https://httpbin.org/ip", proxies=proxies_dict, timeout=10, verify=False)
             return p if r.status_code == 200 else None
         except:
@@ -521,8 +517,8 @@ def process_mass_gate_check(bot, message, ccs, gate_func, gate_name, proxies):
         return
 
     proxies = live_proxies   # use only live ones
-    # --- proxy validation done ---
 
+    # ----- START MESSAGE -----
     try:
         status_msg = bot.send_message(
             message.chat.id,
@@ -538,11 +534,11 @@ def process_mass_gate_check(bot, message, ccs, gate_func, gate_name, proxies):
     start_time = time.time()
     last_update_time = time.time()
 
+    # ----- WORKER WITH RETRY (3 attempts per card) -----
     def worker(cc):
         max_tries = 3
         tried_proxies = []
         for attempt in range(max_tries):
-            # Pick a proxy not tried before (if enough live proxies)
             available = [p for p in proxies if p not in tried_proxies]
             if not available:
                 break
@@ -550,7 +546,6 @@ def process_mass_gate_check(bot, message, ccs, gate_func, gate_name, proxies):
             tried_proxies.append(proxy)
             try:
                 response_text, status = gate_func(cc, proxy)
-            # Even if the gate returns "DECLINED", that's a valid result
                 return {
                     "cc": cc,
                     "response": response_text,
@@ -561,18 +556,17 @@ def process_mass_gate_check(bot, message, ccs, gate_func, gate_name, proxies):
             except Exception as e:
                 print(f"Attempt {attempt+1} failed for {cc} with proxy {proxy}: {e}")
                 continue
-    # All attempts failed
         return {
             "cc": cc,
             "response": "All proxies failed",
             "status": "ERROR",
             "gateway": gate_name,
             "site_url": "API"
-         }
+        }
 
+    # ----- CONCURRENT EXECUTION -----
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {executor.submit(worker, cc): cc for cc in ccs}
-
         for future in as_completed(futures):
             processed += 1
             try:
@@ -589,6 +583,7 @@ def process_mass_gate_check(bot, message, ccs, gate_func, gate_name, proxies):
             except Exception as e:
                 results["error"].append({"cc": futures[future], "response": str(e), "status": "ERROR"})
 
+            # Update UI every 2.5 seconds
             if time.time() - last_update_time > 2.5 or processed == total:
                 try:
                     progress = create_progress_bar(processed, total)
@@ -605,6 +600,7 @@ def process_mass_gate_check(bot, message, ccs, gate_func, gate_name, proxies):
                 except:
                     pass
 
+    # ----- FINAL REPORT -----
     duration = time.time() - start_time
     final_text = (
         f"<b>✅ {gate_name} Completed</b>\n"
@@ -684,6 +680,7 @@ def send_final(bot, chat_id, mid, total, results, duration):
     try: bot.edit_message_text(msg, chat_id, mid, parse_mode='HTML')
 
     except: bot.send_message(chat_id, msg, parse_mode='HTML')
+
 
 
 
