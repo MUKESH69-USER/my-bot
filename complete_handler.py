@@ -213,7 +213,7 @@ def validate_proxies_strict(proxies, bot, message):
     return live_proxies
 
 # ============================================================================
-# USAGE TRACKING & LIMIT
+# USAGE TRACKING & LIMITS
 # ============================================================================
 def reset_usage_if_needed(user_data):
     """If last_usage_reset is not today, reset usage_today to 0."""
@@ -222,20 +222,20 @@ def reset_usage_if_needed(user_data):
         user_data['usage_today'] = 0
         user_data['last_usage_reset'] = today
 
-def get_user_limit(user_id, users_data):
+def get_user_upload_limit(user_id, users_data):
     user_str = str(user_id)
     user_info = users_data.get(user_str, {})
     if not user_info:
         return 0
-    return user_info.get('limit', 1000)  # default 1000
+    return user_info.get('limit', 1000)  # default per‑upload limit
 
-def get_remaining_today(user_id, users_data):
+def get_user_daily_remaining(user_id, users_data):
     user_str = str(user_id)
     user_info = users_data.get(user_str, {})
     if not user_info:
         return 0
     reset_usage_if_needed(user_info)
-    daily_limit = user_info.get('daily_limit', 10000)  # high default, or could be unlimited
+    daily_limit = user_info.get('daily_limit', 10000)  # default daily total
     used = user_info.get('usage_today', 0)
     return max(0, daily_limit - used)
 
@@ -286,16 +286,20 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
             if ccs:
                 user_id = message.from_user.id
                 # Check per‑upload limit
-                limit = get_user_limit(user_id, users_data)
+                limit = get_user_upload_limit(user_id, users_data)
                 if len(ccs) > limit and user_id not in OWNER_ID:
                     bot.edit_message_text(
-                        f"❌ <b>Limit Exceeded!</b>\n\n"
+                        f"⚠️ <b>Limit Exceeded!</b>\n\n"
                         f"Your per‑upload limit is <b>{limit}</b> cards.\n"
-                        f"You uploaded <b>{len(ccs)}</b> cards.\n\n"
-                        f"Please split your list into smaller files.",
+                        f"You uploaded <b>{len(ccs)}</b> cards.\n"
+                        f"<b>Only the first {limit} cards will be checked.</b>\n\n"
+                        f"To check the rest, split your file into smaller parts and upload again.\n"
+                        f"Use <code>/stop</code> at any time to abort the current check.",
                         message.chat.id, msg_loading.message_id, parse_mode='HTML'
                     )
-                    return
+                    ccs = ccs[:limit]  # keep only first 'limit' cards
+                    # Wait a moment so user reads the warning
+                    time.sleep(2)
 
                 if user_id not in user_sessions:
                     user_sessions[user_id] = {}
@@ -312,7 +316,7 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
 
                 bot.edit_message_text(
                     f"📂 <b>File:</b> <code>{file_name}</code>\n"
-                    f"💳 <b>Cards:</b> {len(ccs)}\n"
+                    f"💳 <b>Cards to check:</b> {len(ccs)}\n"
                     f"<b>⚡ Select Checking Gate:</b>",
                     message.chat.id, msg_loading.message_id,
                     reply_markup=markup, parse_mode='HTML'
@@ -371,11 +375,11 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
             bot.send_message(message.chat.id, "⚠️ <b>Upload CCs first!</b>", parse_mode='HTML')
             return
         ccs = user_sessions[user_id]['ccs']
-        # Check per‑upload limit (should have been checked at upload, but double‑check)
-        limit = get_user_limit(user_id, users_data)
-        if len(ccs) > limit and user_id not in OWNER_ID:
+        # Check daily remaining
+        remaining = get_user_daily_remaining(user_id, users_data)
+        if remaining < len(ccs):
             bot.send_message(message.chat.id,
-                f"❌ <b>Limit Exceeded!</b>\n\nYour per‑upload limit is {limit} cards.",
+                f"❌ <b>Daily Limit Exceeded!</b>\n\nYou have only {remaining} cards left for today.",
                 parse_mode='HTML')
             return
         # Check concurrency
@@ -443,11 +447,11 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
                 bot.send_message(call.message.chat.id, "⚠️ Session expired. Upload file again.")
                 return
             ccs = user_sessions[user_id]['ccs']
-            # Check per‑upload limit
-            limit = get_user_limit(user_id, users_data)
-            if len(ccs) > limit and user_id not in OWNER_ID:
+            # Check daily remaining
+            remaining = get_user_daily_remaining(user_id, users_data)
+            if remaining < len(ccs):
                 bot.send_message(call.message.chat.id,
-                    f"❌ <b>Limit Exceeded!</b>\n\nYour per‑upload limit is {limit} cards.",
+                    f"❌ <b>Daily Limit Exceeded!</b>\n\nYou have only {remaining} cards left for today.",
                     parse_mode='HTML')
                 return
             # Check concurrency
@@ -657,14 +661,13 @@ def process_mass_gate_check(bot, message, ccs, gate_func, gate_name, proxies,
         bot.send_message(chat_id, final_text, parse_mode="HTML")
 
 # ============================================================================
-# SHOPIFY MASS CHECK ENGINE (modified to use same concurrency/usage)
+# SHOPIFY MASS CHECK ENGINE (placeholder – adapt your existing function)
 # ============================================================================
 def process_mass_check_engine(bot, message, start_msg, ccs, sites, proxies,
                               check_site_func, process_response_func, update_stats_func,
                               user_id, users_data, save_json_func, users_file):
     # This is a placeholder – you need to adapt your existing Shopify mass check function
     # to use the same concurrency and usage tracking.
-    # For brevity, we assume you have a function that processes cards and calls update_stats.
     # After completion, call increment_usage(user_id, processed, ...)
     # and set_user_busy(user_id, False)
     pass
