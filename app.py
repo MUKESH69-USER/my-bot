@@ -1688,6 +1688,51 @@ def handle_set_limit(message):
     except Exception as e:
         bot.reply_to(message, f"❌ Error: {str(e)}")
 
+@bot.message_handler(commands=['setlimit'])
+def handle_set_limit(message):
+    if not is_owner(message.from_user.id):
+        bot.reply_to(message, "🚫 Owner only command.")
+        return
+    try:
+        parts = message.text.split()
+        if len(parts) != 3:
+            bot.reply_to(message, "Usage: /setlimit <user_id> <daily_limit>")
+            return
+        user_id = parts[1]
+        new_limit = int(parts[2])
+        if new_limit < 0:
+            bot.reply_to(message, "❌ Limit cannot be negative.")
+            return
+        if user_id not in users_data:
+            bot.reply_to(message, f"❌ User {user_id} not found.")
+            return
+        users_data[user_id]['daily_limit'] = new_limit
+        save_json(USERS_FILE, users_data)
+        bot.reply_to(message, f"✅ Daily limit for user {user_id} set to {new_limit}.")
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error: {e}")
+
+@bot.message_handler(commands=['resetusage'])
+def handle_reset_usage(message):
+    if not is_owner(message.from_user.id):
+        bot.reply_to(message, "🚫 Owner only command.")
+        return
+    try:
+        parts = message.text.split()
+        if len(parts) != 2:
+            bot.reply_to(message, "Usage: /resetusage <user_id>")
+            return
+        user_id = parts[1]
+        if user_id not in users_data:
+            bot.reply_to(message, f"❌ User {user_id} not found.")
+            return
+        users_data[user_id]['usage_today'] = 0
+        users_data[user_id]['last_usage_reset'] = date.today().isoformat()
+        save_json(USERS_FILE, users_data)
+        bot.reply_to(message, f"✅ Usage for user {user_id} reset.")
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error: {e}")
+
 
 @bot.message_handler(commands=['grant'])
 def handle_approve_group(message):
