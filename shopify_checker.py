@@ -49,7 +49,7 @@ def check_site_shopify_direct(site_url, cc, proxy=None):
                 params=params,
                 headers=headers,
                 proxies=proxies,
-                timeout=30,
+                timeout=15,
                 verify=False
             )
             data = response.json()
@@ -114,3 +114,4 @@ def process_response_shopify(api_response, site_price='0'):
 
     except Exception as e:
         return f"Parse Error: {e}", "ERROR", "Unknown"
+
